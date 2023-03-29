@@ -1,0 +1,832 @@
+import { isString } from '@vue/shared'
+import { ForParseResult } from './transforms/vFor'
+import {
+  RENDER_SLOT,
+  CREATE_SLOTS,
+  RENDER_LIST,
+  OPEN_BLOCK,
+  FRAGMENT,
+  WITH_DIRECTIVES,
+  WITH_MEMO
+} from './runtimeHelpers'
+import { PropsExpression } from './transforms/transformElement'
+import { ImportItem, TransformContext } from './transform'
+import { getVNodeBlockHelper, getVNodeHelper } from './utils'
+
+// Vue template is a platform-agnostic superset of HTML (syntax only).
+// More namespaces like SVG and MathML are declared by platform specific
+// compilers.
+export type Namespace = number
+
+export const enum Namespaces {
+  HTML
+}
+
+// ast节点类型
+export const enum NodeTypes {
+  ROOT, //根节点
+  ELEMENT,//元素节点
+  TEXT,//文本节点
+  COMMENT,//注释节点
+  SIMPLE_EXPRESSION,//简单表达式
+  INTERPOLATION,//{{}}  插值
+  ATTRIBUTE,//属性节点
+  DIRECTIVE,//带有指令的节点
+  // containers
+  COMPOUND_EXPRESSION, //复合表达式
+  IF, //v-if
+  IF_BRANCH,//v-else
+  FOR,//v-for
+  TEXT_CALL,
+  // codegen  表达式
+  VNODE_CALL,//vnode创建方法调用
+  JS_CALL_EXPRESSION,
+  JS_OBJECT_EXPRESSION, //object对象表达式
+  JS_PROPERTY,
+  JS_ARRAY_EXPRESSION,//数组表达式
+  JS_FUNCTION_EXPRESSION,//函数表达式
+  JS_CONDITIONAL_EXPRESSION, //条件表达式
+  JS_CACHE_EXPRESSION, //缓存内容表达式 _cache[0]
+
+  // ssr codegen
+  JS_BLOCK_STATEMENT,
+  JS_TEMPLATE_LITERAL,
+  JS_IF_STATEMENT, // if条件表达式
+  JS_ASSIGNMENT_EXPRESSION, //赋值表达式   key = value
+  JS_SEQUENCE_EXPRESSION,
+  JS_RETURN_STATEMENT//返回值表达式  return
+}
+
+export const enum ElementTypes {
+  ELEMENT,
+  COMPONENT,
+  SLOT,
+  TEMPLATE
+}
+
+export interface Node {
+  type: NodeTypes
+  loc: SourceLocation
+}
+
+// The node's range. The `start` is inclusive and `end` is exclusive.
+// [start, end)
+// TODO source原始字符串 这里的source是否会存在多个复制版本导致数据冗余
+export interface SourceLocation {
+  start: Position
+  end: Position
+  source: string
+}
+
+export interface Position {
+  offset: number // from start of file
+  line: number
+  column: number
+}
+
+export type ParentNode = RootNode | ElementNode | IfBranchNode | ForNode
+
+export type ExpressionNode = SimpleExpressionNode | CompoundExpressionNode
+
+export type TemplateChildNode =
+  | ElementNode
+  | InterpolationNode
+  | CompoundExpressionNode
+  | TextNode
+  | CommentNode
+  | IfNode
+  | IfBranchNode
+  | ForNode
+  | TextCallNode
+
+export interface RootNode extends Node {
+  type: NodeTypes.ROOT
+  children: TemplateChildNode[]
+  helpers: symbol[]
+  components: string[] //注册的组件资源
+  directives: string[]//注册的质量资源
+  hoists: (JSChildNode | null)[] //静态节点
+  imports: ImportItem[]
+  cached: number
+  temps: number
+  ssrHelpers?: symbol[]
+  codegenNode?: TemplateChildNode | JSChildNode | BlockStatement
+
+  // v2 compat only
+  filters?: string[]
+}
+
+export type ElementNode =
+  | PlainElementNode
+  | ComponentNode
+  | SlotOutletNode
+  | TemplateNode
+
+export interface BaseElementNode extends Node {
+  type: NodeTypes.ELEMENT
+  ns: Namespace
+  tag: string
+  tagType: ElementTypes //可能是原生标签 ,组件 插槽 template插槽节点
+  isSelfClosing: boolean
+  props: Array<AttributeNode | DirectiveNode> //原生属性  指令属性
+  children: TemplateChildNode[]
+}
+
+export interface PlainElementNode extends BaseElementNode {
+  tagType: ElementTypes.ELEMENT
+  codegenNode:
+    | VNodeCall
+    | SimpleExpressionNode // when hoisted
+    | CacheExpression // when cached by v-once
+    | MemoExpression // when cached by v-memo
+    | undefined
+  ssrCodegenNode?: TemplateLiteral
+}
+
+export interface ComponentNode extends BaseElementNode {
+  tagType: ElementTypes.COMPONENT
+  codegenNode:
+    | VNodeCall
+    | CacheExpression // when cached by v-once
+    | MemoExpression // when cached by v-memo
+    | undefined
+  ssrCodegenNode?: CallExpression
+}
+
+export interface SlotOutletNode extends BaseElementNode {
+  tagType: ElementTypes.SLOT
+  codegenNode:
+    | RenderSlotCall
+    | CacheExpression // when cached by v-once
+    | undefined
+  ssrCodegenNode?: CallExpression
+}
+
+export interface TemplateNode extends BaseElementNode {
+  tagType: ElementTypes.TEMPLATE
+  // TemplateNode is a container type that always gets compiled away
+  codegenNode: undefined
+}
+
+export interface TextNode extends Node {
+  type: NodeTypes.TEXT
+  content: string
+}
+
+export interface CommentNode extends Node {
+  type: NodeTypes.COMMENT
+  content: string
+}
+
+export interface AttributeNode extends Node {
+  type: NodeTypes.ATTRIBUTE
+  name: string
+  value: TextNode | undefined
+}
+
+// v-model:update.a.b = 'count'
+export interface DirectiveNode extends Node {
+  type: NodeTypes.DIRECTIVE
+  name: string
+  exp: ExpressionNode | undefined //指令的表达式 count
+  arg: ExpressionNode | undefined //指令的参数 update
+  modifiers: string[] //指令修饰符 a b
+  /**
+   * optional property to cache the expression parse result for v-for
+   */
+  parseResult?: ForParseResult
+}
+
+/**
+ * Static types have several levels.
+ * Higher levels implies lower levels. e.g. a node that can be stringified
+ * can always be hoisted and skipped for patch.
+ */
+// 静态类型 patch 阶段可以被跳过比较的节点
+export const enum ConstantTypes {
+  NOT_CONSTANT = 0,
+  CAN_SKIP_PATCH, //patch 阶段可以跳过
+  CAN_HOIST, //可以对节点做静态提升
+  CAN_STRINGIFY //可以以字符串形式处理的节点
+}
+
+export interface SimpleExpressionNode extends Node {
+  type: NodeTypes.SIMPLE_EXPRESSION
+  content: string
+  isStatic: boolean //静态表达式,结果固定
+  constType: ConstantTypes
+  /**
+   * Indicates this is an identifier for a hoist vnode call and points to the
+   * hoisted node.
+   */
+  hoisted?: JSChildNode
+  /**
+   * an expression parsed as the params of a function will track
+   * the identifiers declared inside the function body.
+   */
+  identifiers?: string[]
+  isHandlerKey?: boolean
+}
+
+export interface InterpolationNode extends Node {
+  type: NodeTypes.INTERPOLATION
+  content: ExpressionNode
+}
+
+// 计算属性表达式
+export interface CompoundExpressionNode extends Node {
+  type: NodeTypes.COMPOUND_EXPRESSION
+  children: (
+    | SimpleExpressionNode
+    | CompoundExpressionNode
+    | InterpolationNode
+    | TextNode
+    | string
+    | symbol
+  )[]
+
+  /**
+   * an expression parsed as the params of a function will track
+   * the identifiers declared inside the function body.
+   */
+  identifiers?: string[]
+  isHandlerKey?: boolean
+}
+
+// 带有v-if的nosde节点
+export interface IfNode extends Node {
+  type: NodeTypes.IF
+  branches: IfBranchNode[]
+  codegenNode?: IfConditionalExpression | CacheExpression // <div v-if v-once>
+}
+
+// v-esle v-else-if 节点
+export interface IfBranchNode extends Node {
+  type: NodeTypes.IF_BRANCH
+  condition: ExpressionNode | undefined // else
+  children: TemplateChildNode[]
+  userKey?: AttributeNode | DirectiveNode
+  isTemplateIf?: boolean
+}
+
+// v-for节点
+export interface ForNode extends Node {
+  type: NodeTypes.FOR
+  source: ExpressionNode
+  valueAlias: ExpressionNode | undefined
+  keyAlias: ExpressionNode | undefined
+  objectIndexAlias: ExpressionNode | undefined
+  parseResult: ForParseResult
+  children: TemplateChildNode[]
+  codegenNode?: ForCodegenNode
+}
+
+export interface TextCallNode extends Node {
+  type: NodeTypes.TEXT_CALL
+  content: TextNode | InterpolationNode | CompoundExpressionNode
+  codegenNode: CallExpression | SimpleExpressionNode // when hoisted
+}
+
+export type TemplateTextChildNode =
+  | TextNode
+  | InterpolationNode
+  | CompoundExpressionNode
+
+export interface VNodeCall extends Node {
+  type: NodeTypes.VNODE_CALL
+  tag: string | symbol | CallExpression
+  props: PropsExpression | undefined
+  children:
+    | TemplateChildNode[] // multiple children
+    | TemplateTextChildNode // single text child
+    | SlotsExpression // component slots
+    | ForRenderListExpression // v-for fragment call
+    | SimpleExpressionNode // hoisted
+    | undefined
+  patchFlag: string | undefined
+  dynamicProps: string | SimpleExpressionNode | undefined
+  directives: DirectiveArguments | undefined
+  isBlock: boolean
+  disableTracking: boolean
+  isComponent: boolean
+}
+
+// JS Node Types ---------------------------------------------------------------
+
+// We also include a number of JavaScript AST nodes for code generation.
+// The AST is an intentionally minimal subset just to meet the exact needs of
+// Vue render function generation.
+//  js的语法节点
+
+export type JSChildNode =
+  | VNodeCall
+  | CallExpression
+  | ObjectExpression
+  | ArrayExpression
+  | ExpressionNode
+  | FunctionExpression
+  | ConditionalExpression
+  | CacheExpression
+  | AssignmentExpression
+  | SequenceExpression
+
+export interface CallExpression extends Node {
+  type: NodeTypes.JS_CALL_EXPRESSION
+  callee: string | symbol
+  arguments: (
+    | string
+    | symbol
+    | JSChildNode
+    | SSRCodegenNode
+    | TemplateChildNode
+    | TemplateChildNode[]
+  )[]
+}
+
+export interface ObjectExpression extends Node {
+  type: NodeTypes.JS_OBJECT_EXPRESSION
+  properties: Array<Property>
+}
+
+export interface Property extends Node {
+  type: NodeTypes.JS_PROPERTY
+  key: ExpressionNode
+  value: JSChildNode
+}
+
+export interface ArrayExpression extends Node {
+  type: NodeTypes.JS_ARRAY_EXPRESSION
+  elements: Array<string | Node>
+}
+
+export interface FunctionExpression extends Node {
+  type: NodeTypes.JS_FUNCTION_EXPRESSION
+  params: ExpressionNode | string | (ExpressionNode | string)[] | undefined
+  returns?: TemplateChildNode | TemplateChildNode[] | JSChildNode
+  body?: BlockStatement | IfStatement
+  newline: boolean
+  /**
+   * This flag is for codegen to determine whether it needs to generate the
+   * withScopeId() wrapper
+   */
+  isSlot: boolean
+  /**
+   * __COMPAT__ only, indicates a slot function that should be excluded from
+   * the legacy $scopedSlots instance property.
+   */
+  isNonScopedSlot?: boolean
+}
+
+export interface ConditionalExpression extends Node {
+  type: NodeTypes.JS_CONDITIONAL_EXPRESSION
+  test: JSChildNode
+  consequent: JSChildNode
+  alternate: JSChildNode
+  newline: boolean
+}
+
+export interface CacheExpression extends Node {
+  type: NodeTypes.JS_CACHE_EXPRESSION
+  index: number
+  value: JSChildNode
+  isVNode: boolean
+}
+
+export interface MemoExpression extends CallExpression {
+  callee: typeof WITH_MEMO
+  arguments: [ExpressionNode, MemoFactory, string, string]
+}
+
+interface MemoFactory extends FunctionExpression {
+  returns: BlockCodegenNode
+}
+
+// SSR-specific Node Types -----------------------------------------------------
+
+export type SSRCodegenNode =
+  | BlockStatement
+  | TemplateLiteral
+  | IfStatement
+  | AssignmentExpression
+  | ReturnStatement
+  | SequenceExpression
+
+export interface BlockStatement extends Node {
+  type: NodeTypes.JS_BLOCK_STATEMENT
+  body: (JSChildNode | IfStatement)[]
+}
+
+export interface TemplateLiteral extends Node {
+  type: NodeTypes.JS_TEMPLATE_LITERAL
+  elements: (string | JSChildNode)[]
+}
+
+export interface IfStatement extends Node {
+  type: NodeTypes.JS_IF_STATEMENT
+  test: ExpressionNode
+  consequent: BlockStatement
+  alternate: IfStatement | BlockStatement | ReturnStatement | undefined
+}
+
+export interface AssignmentExpression extends Node {
+  type: NodeTypes.JS_ASSIGNMENT_EXPRESSION
+  left: SimpleExpressionNode
+  right: JSChildNode
+}
+
+export interface SequenceExpression extends Node {
+  type: NodeTypes.JS_SEQUENCE_EXPRESSION
+  expressions: JSChildNode[]
+}
+
+export interface ReturnStatement extends Node {
+  type: NodeTypes.JS_RETURN_STATEMENT
+  returns: TemplateChildNode | TemplateChildNode[] | JSChildNode
+}
+
+// Codegen Node Types ----------------------------------------------------------
+
+export interface DirectiveArguments extends ArrayExpression {
+  elements: DirectiveArgumentNode[]
+}
+
+export interface DirectiveArgumentNode extends ArrayExpression {
+  elements: // dir, exp, arg, modifiers
+  | [string]
+    | [string, ExpressionNode]
+    | [string, ExpressionNode, ExpressionNode]
+    | [string, ExpressionNode, ExpressionNode, ObjectExpression]
+}
+
+// renderSlot(...)
+export interface RenderSlotCall extends CallExpression {
+  callee: typeof RENDER_SLOT
+  arguments: // $slots, name, props, fallback
+  | [string, string | ExpressionNode]
+    | [string, string | ExpressionNode, PropsExpression]
+    | [
+        string,
+        string | ExpressionNode,
+        PropsExpression | '{}',
+        TemplateChildNode[]
+      ]
+}
+
+export type SlotsExpression = SlotsObjectExpression | DynamicSlotsExpression
+
+// { foo: () => [...] }
+export interface SlotsObjectExpression extends ObjectExpression {
+  properties: SlotsObjectProperty[]
+}
+
+export interface SlotsObjectProperty extends Property {
+  value: SlotFunctionExpression
+}
+
+export interface SlotFunctionExpression extends FunctionExpression {
+  returns: TemplateChildNode[]
+}
+
+// createSlots({ ... }, [
+//    foo ? () => [] : undefined,
+//    renderList(list, i => () => [i])
+// ])
+export interface DynamicSlotsExpression extends CallExpression {
+  callee: typeof CREATE_SLOTS
+  arguments: [SlotsObjectExpression, DynamicSlotEntries]
+}
+
+export interface DynamicSlotEntries extends ArrayExpression {
+  elements: (ConditionalDynamicSlotNode | ListDynamicSlotNode)[]
+}
+
+export interface ConditionalDynamicSlotNode extends ConditionalExpression {
+  consequent: DynamicSlotNode
+  alternate: DynamicSlotNode | SimpleExpressionNode
+}
+
+export interface ListDynamicSlotNode extends CallExpression {
+  callee: typeof RENDER_LIST
+  arguments: [ExpressionNode, ListDynamicSlotIterator]
+}
+
+export interface ListDynamicSlotIterator extends FunctionExpression {
+  returns: DynamicSlotNode
+}
+
+export interface DynamicSlotNode extends ObjectExpression {
+  properties: [Property, DynamicSlotFnProperty]
+}
+
+export interface DynamicSlotFnProperty extends Property {
+  value: SlotFunctionExpression
+}
+
+export type BlockCodegenNode = VNodeCall | RenderSlotCall
+
+export interface IfConditionalExpression extends ConditionalExpression {
+  consequent: BlockCodegenNode | MemoExpression
+  alternate: BlockCodegenNode | IfConditionalExpression | MemoExpression
+}
+
+export interface ForCodegenNode extends VNodeCall {
+  isBlock: true
+  tag: typeof FRAGMENT
+  props: undefined
+  children: ForRenderListExpression
+  patchFlag: string
+  disableTracking: boolean
+}
+
+export interface ForRenderListExpression extends CallExpression {
+  callee: typeof RENDER_LIST
+  arguments: [ExpressionNode, ForIteratorExpression]
+}
+
+export interface ForIteratorExpression extends FunctionExpression {
+  returns: BlockCodegenNode
+}
+
+// AST Utilities ---------------------------------------------------------------
+
+// Some expressions, e.g. sequence and conditional expressions, are never
+// associated with template nodes, so their source locations are just a stub.
+// Container types like CompoundExpression also don't need a real location.
+export const locStub: SourceLocation = {
+  source: '',
+  start: { line: 1, column: 1, offset: 0 },
+  end: { line: 1, column: 1, offset: 0 }
+}
+
+// 创建根ast根节点
+export function createRoot(
+  children: TemplateChildNode[],
+  loc = locStub
+): RootNode {
+  return {
+    type: NodeTypes.ROOT, //虚拟的根node,这样组件不需要必须存在一个根dom节点
+    children,
+    helpers: [],
+    components: [],
+    directives: [],
+    hoists: [],
+    imports: [],
+    cached: 0,
+    temps: 0,
+    codegenNode: undefined,
+    loc
+  }
+}
+
+// 返回节点生成函数的对象形式
+export function createVNodeCall(
+  context: TransformContext | null,
+  tag: VNodeCall['tag'],
+  props?: VNodeCall['props'],
+  children?: VNodeCall['children'],
+  patchFlag?: VNodeCall['patchFlag'],
+  dynamicProps?: VNodeCall['dynamicProps'], //动态属性
+  directives?: VNodeCall['directives'],
+  isBlock: VNodeCall['isBlock'] = false,
+  disableTracking: VNodeCall['disableTracking'] = false,
+  isComponent: VNodeCall['isComponent'] = false,
+  loc = locStub
+): VNodeCall {
+  if (context) {
+    if (isBlock) {
+      context.helper(OPEN_BLOCK)
+      context.helper(getVNodeBlockHelper(context.inSSR, isComponent))
+    } else {
+      context.helper(getVNodeHelper(context.inSSR, isComponent))
+    }
+    if (directives) {
+      context.helper(WITH_DIRECTIVES)
+    }
+  }
+
+  return {
+    type: NodeTypes.VNODE_CALL,
+    tag,
+    props,
+    children,
+    patchFlag,
+    dynamicProps,
+    directives,
+    isBlock,
+    disableTracking,
+    isComponent,
+    loc
+  }
+}
+
+// 数组表达式
+export function createArrayExpression(
+  elements: ArrayExpression['elements'],
+  loc: SourceLocation = locStub
+): ArrayExpression {
+  return {
+    type: NodeTypes.JS_ARRAY_EXPRESSION,
+    loc,
+    elements
+  }
+}
+// 对象表达式
+export function createObjectExpression(
+  properties: ObjectExpression['properties'],
+  loc: SourceLocation = locStub
+): ObjectExpression {
+  return {
+    type: NodeTypes.JS_OBJECT_EXPRESSION,
+    loc,
+    properties
+  }
+}
+
+// 对象属性表达式
+export function createObjectProperty(
+  key: Property['key'] | string,
+  value: Property['value']
+): Property {
+  return {
+    type: NodeTypes.JS_PROPERTY,
+    loc: locStub,
+    key: isString(key) ? createSimpleExpression(key, true) : key,
+    value
+  }
+}
+
+// 创建简单表达式 静态表达式可以直接输出为字符串
+export function createSimpleExpression(
+  content: SimpleExpressionNode['content'], //表达式内容
+  isStatic: SimpleExpressionNode['isStatic'] = false, //静态表达式
+  loc: SourceLocation = locStub,
+  constType: ConstantTypes = ConstantTypes.NOT_CONSTANT
+): SimpleExpressionNode {
+  return {
+    type: NodeTypes.SIMPLE_EXPRESSION,
+    loc,
+    content,
+    isStatic,
+    constType: isStatic ? ConstantTypes.CAN_STRINGIFY : constType
+  }
+}
+
+// 创建插值
+export function createInterpolation(
+  content: InterpolationNode['content'] | string,
+  loc: SourceLocation
+): InterpolationNode {
+  return {
+    type: NodeTypes.INTERPOLATION,
+    loc,
+    content: isString(content)
+      ? createSimpleExpression(content, false, loc)
+      : content
+  }
+}
+
+// 创建复合表达式
+export function createCompoundExpression(
+  children: CompoundExpressionNode['children'],
+  loc: SourceLocation = locStub
+): CompoundExpressionNode {
+  return {
+    type: NodeTypes.COMPOUND_EXPRESSION,
+    loc,
+    children
+  }
+}
+
+type InferCodegenNodeType<T> = T extends typeof RENDER_SLOT
+  ? RenderSlotCall
+  : CallExpression
+
+//调用函数的表达式  _withMemo([_ctx.arg],()=>createElementNode());
+export function createCallExpression<T extends CallExpression['callee']>(
+  callee: T, //调用的函数名称
+  args: CallExpression['arguments'] = [], // 传入的函数参数
+  loc: SourceLocation = locStub
+): InferCodegenNodeType<T> {
+  return {
+    type: NodeTypes.JS_CALL_EXPRESSION,
+    loc,
+    callee, //函数名称
+    arguments: args //函数参数
+  } as InferCodegenNodeType<T>
+}
+
+// 创建函数表达式
+export function createFunctionExpression(
+  params: FunctionExpression['params'], //函数参数
+  returns: FunctionExpression['returns'] = undefined, //函数返回值
+  newline: boolean = false, //TODO
+  isSlot: boolean = false,
+  loc: SourceLocation = locStub
+): FunctionExpression {
+  return {
+    type: NodeTypes.JS_FUNCTION_EXPRESSION,
+    params,
+    returns,
+    newline,
+    isSlot,
+    loc
+  }
+}
+
+// 创建条件表达式
+export function createConditionalExpression(
+  test: ConditionalExpression['test'],
+  consequent: ConditionalExpression['consequent'],
+  alternate: ConditionalExpression['alternate'],
+  newline = true
+): ConditionalExpression {
+  return {
+    type: NodeTypes.JS_CONDITIONAL_EXPRESSION,
+    test,
+    consequent,
+    alternate,
+    newline,
+    loc: locStub
+  }
+}
+
+// 创建缓存表达式 表达式会被缓存到 _cache中m便于后续复用 _cache[0]
+export function createCacheExpression(
+  index: number,
+  value: JSChildNode,
+  isVNode: boolean = false
+): CacheExpression {
+  return {
+    type: NodeTypes.JS_CACHE_EXPRESSION,
+    index, //_cache[index]
+    value,
+    isVNode,
+    loc: locStub
+  }
+}
+
+export function createBlockStatement(
+  body: BlockStatement['body']
+): BlockStatement {
+  return {
+    type: NodeTypes.JS_BLOCK_STATEMENT,
+    body,
+    loc: locStub
+  }
+}
+
+export function createTemplateLiteral(
+  elements: TemplateLiteral['elements']
+): TemplateLiteral {
+  return {
+    type: NodeTypes.JS_TEMPLATE_LITERAL,
+    elements,
+    loc: locStub
+  }
+}
+
+export function createIfStatement(
+  test: IfStatement['test'],
+  consequent: IfStatement['consequent'],
+  alternate?: IfStatement['alternate']
+): IfStatement {
+  return {
+    type: NodeTypes.JS_IF_STATEMENT,
+    test,
+    consequent,
+    alternate,
+    loc: locStub
+  }
+}
+
+export function createAssignmentExpression(
+  left: AssignmentExpression['left'],
+  right: AssignmentExpression['right']
+): AssignmentExpression {
+  return {
+    type: NodeTypes.JS_ASSIGNMENT_EXPRESSION,
+    left,
+    right,
+    loc: locStub
+  }
+}
+
+export function createSequenceExpression(
+  expressions: SequenceExpression['expressions']
+): SequenceExpression {
+  return {
+    type: NodeTypes.JS_SEQUENCE_EXPRESSION,
+    expressions,
+    loc: locStub
+  }
+}
+
+export function createReturnStatement(
+  returns: ReturnStatement['returns']
+): ReturnStatement {
+  return {
+    type: NodeTypes.JS_RETURN_STATEMENT,
+    returns,
+    loc: locStub
+  }
+}

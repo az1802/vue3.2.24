@@ -1,0 +1,88 @@
+<script src="../../dist/vue.global.js"></script>
+
+
+<div id="demo" >
+  <div @click='addCount'>add1</div>
+  <div @click='addCount2'>add2</div>
+  <div>counter---{{counter}}</div>
+  <div>counter2---{{counter2}}</div>
+</div>
+
+<script>
+
+const {effect,reactive,watchEffect,ref,computed,effectScope,watch,onScopeDispose} = Vue;
+
+Vue.createApp({
+
+  setup(){
+
+    const parentScope = effectScope();
+    let counter = ref(1);
+    let counter2 = ref(1);
+
+    parentScope.run(() => {
+      console.log("effect scope init");
+
+      const doubled = computed(() => counter.value * 2)
+      // 与父级断开链接
+      nestedScope = effectScope(true /* detached */)
+      nestedScope.run(() => {
+        watch([doubled,counter], () => {
+          console.log("nestedScope,---")
+          console.log('nestedScope', doubled.value)
+        })
+      })
+      // 父级断开监听也会断开
+      childScope = effectScope()
+      childScope.run(() => {
+        watch(doubled, () => console.log('childScope', doubled.value))
+      })
+
+      watchEffect(() => console.log('Count: ', doubled.value));
+
+      onScopeDispose(()=>{
+        console.log("clean up")
+      })
+
+    })
+
+    setTimeout(()=>{
+      parentScope.stop();
+      console.log(nestedScope);
+    },2000)
+
+    function addCount(){
+      counter.value+=1;
+    }
+    function addCount2(){
+      counter2.value+=1;
+
+    }
+
+    return {
+      addCount,
+      counter,
+      counter2,
+      addCount2
+    }
+  }
+}).mount('#demo')
+</script>
+
+<style>
+  body {
+    font-family: Menlo, Consolas, monospace;
+    color: #444;
+  }
+  .item {
+    cursor: pointer;
+  }
+  .bold {
+    font-weight: bold;
+  }
+  ul {
+    padding-left: 1em;
+    line-height: 1.5em;
+    list-style-type: dot;
+  }
+</style>

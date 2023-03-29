@@ -1,0 +1,70 @@
+<script src="../../dist/vue.global.js"></script>
+
+
+<div id="demo" >
+   <div :class='obj'>123</div>
+ </div>
+
+<script>
+
+const {effect,reactive,watchEffect,ref,computed,effectScope,watch,onScopeDispose,deferredComputed,parse} = Vue;
+
+const app = Vue.createApp({
+
+  setup(){
+
+    let counter = ref(1);
+     const double = computed(()=>counter.value*2);
+     const double2 = deferredComputed(()=>counter.value*2);
+    effect(()=>{
+      console.log("double---",double);
+    })
+    effect(()=>{
+      console.log("double2---",double2);
+    })
+    function addCount(){
+      // computed会多次触发 , deferredComputed只会触发一次
+      // counter.value+=1;
+      // counter.value+=1;
+      // counter.value+=1;
+
+      //deferredComputed不会触发,最终执行的时候会对结果进行比较
+      counter.value+=1;
+      counter.value-=1;
+    }
+
+
+
+
+    return {
+      addCount,
+      counter,
+      name:"aa",
+      flag:ref(false),
+      arr:[1,2,3,4,5],
+      obj:{a:"aa"}
+    }
+  }
+}).mount('#demo')
+
+console.log('app: ', app);
+
+</script>
+
+<style>
+  body {
+    font-family: Menlo, Consolas, monospace;
+    color: #444;
+  }
+  .item {
+    cursor: pointer;
+  }
+  .bold {
+    font-weight: bold;
+  }
+  ul {
+    padding-left: 1em;
+    line-height: 1.5em;
+    list-style-type: dot;
+  }
+</style>
