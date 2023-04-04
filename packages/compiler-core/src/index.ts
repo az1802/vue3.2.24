@@ -12,14 +12,14 @@ export {
 } from './options'
 export { baseParse, TextModes } from './parse'
 export {
-  transform,
-  TransformContext,
+  transform,//ast转换函数
+  TransformContext,//transform 上下文
   createTransformContext,
-  traverseNode,
-  createStructuralDirectiveTransform,
-  NodeTransform,
-  StructuralDirectiveTransform,
-  DirectiveTransform
+  traverseNode,//遍历astnode
+  createStructuralDirectiveTransform,//创建结构化指令的transform函数(v-if v-for)
+  NodeTransform,//ast单个节点transform
+  StructuralDirectiveTransform,//结构化指令转换
+  DirectiveTransform//指令转换
 } from './transform'
 export { generate, CodegenContext, CodegenResult } from './codegen'
 export {

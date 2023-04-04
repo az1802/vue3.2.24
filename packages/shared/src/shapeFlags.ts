@@ -9,5 +9,5 @@ export const enum ShapeFlags { //vnode 烈性的描述
   SUSPENSE = 1 << 7,// 表示vnode描述的是个suspense组件
   COMPONENT_SHOULD_KEEP_ALIVE = 1 << 8, // 表示需要被keep-live的有状态组件
   COMPONENT_KEPT_ALIVE = 1 << 9,// 已经被keep-live的有状态组件
-  COMPONENT = ShapeFlags.STATEFUL_COMPONENT | ShapeFlags.FUNCTIONAL_COMPONENT
+  COMPONENT = ShapeFlags.STATEFUL_COMPONENT | ShapeFlags.FUNCTIONAL_COMPONENT//组件类型
 }

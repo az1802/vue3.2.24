@@ -574,7 +574,7 @@ export const setCurrentInstance = (instance: ComponentInternalInstance) => {
   instance.scope.on()
 }
 
-// TODO 全局currentInstance 置空
+// 全局currentInstance 置空
 export const unsetCurrentInstance = () => {
   currentInstance && currentInstance.scope.off()
   currentInstance = null
@@ -678,6 +678,7 @@ function setupStatefulComponent(
     unsetCurrentInstance()
 
     if (isPromise(setupResult)) {//promise对象
+      // 异步组件阻力完成之后将currentStance置空
       setupResult.then(unsetCurrentInstance, unsetCurrentInstance)
       if (isSSR) {
         // return the promise so server-renderer can wait on it

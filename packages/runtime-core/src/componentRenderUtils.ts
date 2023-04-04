@@ -326,7 +326,13 @@ const isElementRoot = (vnode: VNode) => {
   )
 }
 
-// 新旧vnode节点 对比 props 查看组件是否应该更新
+/**
+ * 开发环境中,热更新会强制更新组件子节点
+ * 存在指令或者动画一定会更新
+ * patchFlag(DYNAMIC_SLOTS,FULL_PROPS且属性发生变化,)
+ * 总的来说根据children 和 props做对比判断是否需要进行更新
+ * 这也从侧面反映出 Vue 的更新不仅是组件层面的细粒度更新，更在源码层面帮我们处理了一些不必要的子节点更新！
+ */
 export function shouldUpdateComponent(
   prevVNode: VNode,
   nextVNode: VNode,
@@ -339,6 +345,7 @@ export function shouldUpdateComponent(
   // Parent component's render function was hot-updated. Since this may have
   // caused the child component's slots content to have changed, we need to
   // force the child to update as well.
+  // 开发环境中热更新时会强制进行更新
   if (__DEV__ && (prevChildren || nextChildren) && isHmrUpdating) {
     return true
   }

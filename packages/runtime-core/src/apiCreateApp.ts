@@ -162,9 +162,9 @@ export function createAppContext(): AppContext {
     components: {},
     directives: {},
     provides: Object.create(null),
-    optionsCache: new WeakMap(),
-    propsCache: new WeakMap(),
-    emitsCache: new WeakMap()
+    optionsCache: new WeakMap(),//缓存组件选项对象，其作用是在多次访问同一个组件选项对象时，避免重复地进行解析和合并，从而提高性能。
+    propsCache: new WeakMap(),//用于缓存已经解析的 prop 对象，其作用是在多次访问同一个组件的 prop 时，避免重复地进行解析，从而提高性能。
+    emitsCache: new WeakMap()// 用于缓存已经解析的事件名列表，其作用是在多次访问同一个组件的事件名列表时，避免重复地进行解析，从而提高性能。
   }
 }
 
@@ -181,7 +181,7 @@ export function createAppAPI<HostElement>(
   hydrate?: RootHydrateFunction
 ): CreateAppFunction<HostElement> {
   return function createApp(rootComponent, rootProps = null) {
-    if (!isFunction(rootComponent)) {
+    if (!isFunction(rootComponent)) { //component为options形式,做一层浅拷贝复制
       rootComponent = { ...rootComponent }
     }
 
@@ -190,7 +190,7 @@ export function createAppAPI<HostElement>(
       rootProps = null
     }
 
-    const context = createAppContext()
+    const context = createAppContext();
     const installedPlugins = new Set()
 
     let isMounted = false
@@ -218,7 +218,7 @@ export function createAppAPI<HostElement>(
         }
       },
 
-      use(plugin: Plugin, ...options: any[]) {
+      use(plugin: Plugin, ...options: any[]) {//添加插件到插件列表并执行插件
         if (installedPlugins.has(plugin)) {
           __DEV__ && warn(`Plugin has already been applied to target app.`)
         } else if (plugin && isFunction(plugin.install)) {
@@ -288,7 +288,7 @@ export function createAppAPI<HostElement>(
       ): any {
         if (!isMounted) {
           // #5571
-          if (__DEV__ && (rootContainer as any).__vue_app__) { //DOm上已经存在vue实例对象
+          if (__DEV__ && (rootContainer as any).__vue_app__) { //DOM上已经存在vue实例对象
             warn(
               `There is already an app instance mounted on the host container.\n` +
                 ` If you want to mount another app on the same host container,` +
@@ -316,7 +316,7 @@ export function createAppAPI<HostElement>(
           if (isHydrate && hydrate) {
             hydrate(vnode as VNode<Node, Element>, rootContainer as any)
           } else {
-            render(vnode, rootContainer, isSVG)
+            render(vnode, rootContainer, isSVG)//vnode渲染到dom节点
           }
           isMounted = true
           app._container = rootContainer

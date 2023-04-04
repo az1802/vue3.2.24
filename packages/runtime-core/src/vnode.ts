@@ -239,6 +239,7 @@ export let currentBlock: VNode[] | null = null
  * fragment always diffs its children.
  *
  * @private
+ * openBlock,必须在createBlock之前被调用,blockStack中压入currentBlock收集当前vnode下的动态子节点
  */
 export function openBlock(disableTracking = false) {
   blockStack.push((currentBlock = disableTracking ? null : []))
@@ -285,7 +286,7 @@ function setupBlock(vnode: VNode) {
   closeBlock() //弹出currentBlock
   // a block is always going to be patched, so track it as a child of its
   // parent block
-  if (isBlockTreeEnabled > 0 && currentBlock) {
+  if (isBlockTreeEnabled > 0 && currentBlock) { //当前vnode节点为父级的动态子节点,所有这里push到currentBlock中
     currentBlock.push(vnode)
   }
   return vnode
@@ -293,6 +294,7 @@ function setupBlock(vnode: VNode) {
 
 /**
  * @private
+ * 将创建的vnode中的动态节点保存到vnode.dynamicChildren中
  */
 export function createElementBlock(
   type: string | typeof Fragment, //vnode节点类型
@@ -404,16 +406,16 @@ const normalizeRef = ({
   ) as any
 }
 
-// 创建基础的vnode节点 工厂函数
+// 创建基础的vnode节点工厂函数
 function createBaseVNode(
-  type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT,
-  props: (Data & VNodeProps) | null = null,
+  type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT, //节点类型
+  props: (Data & VNodeProps) | null = null,//节点属性
   children: unknown = null,
-  patchFlag = 0,
-  dynamicProps: string[] | null = null,
-  shapeFlag = type === Fragment ? 0 : ShapeFlags.ELEMENT,
+  patchFlag = 0,//patch阶段,需要作比较的内容
+  dynamicProps: string[] | null = null,//动态属性
+  shapeFlag = type === Fragment ? 0 : ShapeFlags.ELEMENT,//节点的类型
   isBlockNode = false,
-  needFullChildrenNormalization = false
+  needFullChildrenNormalization = false //需要对子节点进行规范化处理
 ) {
   const vnode = {
     __v_isVNode: true,
@@ -443,7 +445,7 @@ function createBaseVNode(
     appContext: null//实例上下文
   } as VNode
 
-  if (needFullChildrenNormalization) {
+  if (needFullChildrenNormalization) { //规范化处理子节点
     normalizeChildren(vnode, children)
     // normalize suspense children
     if (__FEATURE_SUSPENSE__ && shapeFlag & ShapeFlags.SUSPENSE) {
@@ -463,6 +465,8 @@ function createBaseVNode(
   }
 
   // track vnode for block tree
+  // Block tree 编译期间对模板进行分析和优化，以提高组件的渲染性能和响应速度。
+  // Vue 3 的编译器会基于 Block tree 进行一系列的分析和优化操作，例如静态提升、静态提取、静态提取等，从而能够在组件的运行时阶段更加高效地进行 VNode 的创建和更新。
   if (
     isBlockTreeEnabled > 0 &&
     // avoid a block node from tracking itself
@@ -495,6 +499,7 @@ export const createVNode = (
   __DEV__ ? createVNodeWithArgsTransform : _createVNode
 ) as typeof _createVNode
 
+// 创建vnode节点
 function _createVNode(
   type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT, //节点类型
   props: (Data & VNodeProps) | null = null, //节点属性
@@ -723,7 +728,7 @@ export function createCommentVNode(
     : createVNode(Comment, null, text)
 }
 
-// 对不同形式的参数标准处理为vnode形式
+// 对不同形式的参数标准处理为标准的vnode形式
 export function normalizeVNode(child: VNodeChild): VNode {
   if (child == null || typeof child === 'boolean') {
     // empty placeholder
@@ -752,7 +757,9 @@ export function cloneIfMounted(child: VNode): VNode {
   return child.el === null || child.memo ? child : cloneVNode(child)
 }
 
-// TODO 对vnode的children进行格式化处理 同时标记type
+// 在 Vue 3 中，组件的子节点可以是多种类型，包括 VNode 节点、字符串、数字、布尔值等，
+// 这些节点可能会包含不同的属性和方法，因此在处理子节点时需要进行统一的格式转换。
+// normalizeChildren 函数就是为了完成这个任务而设计的。
 export function normalizeChildren(vnode: VNode, children: unknown) {
   let type = 0
   const { shapeFlag } = vnode
@@ -793,19 +800,19 @@ export function normalizeChildren(vnode: VNode, children: unknown) {
     }
   } else if (isFunction(children)) {
     children = { default: children, _ctx: currentRenderingInstance }
-    type = ShapeFlags.SLOTS_CHILDREN
+    type = ShapeFlags.SLOTS_CHILDREN //插槽数组
   } else {
     children = String(children)
     // force teleport children to array so it can be moved around
     if (shapeFlag & ShapeFlags.TELEPORT) {
-      type = ShapeFlags.ARRAY_CHILDREN
+      type = ShapeFlags.ARRAY_CHILDREN //节点数组
       children = [createTextVNode(children as string)]
     } else {
-      type = ShapeFlags.TEXT_CHILDREN
+      type = ShapeFlags.TEXT_CHILDREN //文本节点
     }
   }
   vnode.children = children as VNodeNormalizedChildren
-  vnode.shapeFlag |= type
+  vnode.shapeFlag |= type //添加节点类型
 }
 
 // 合并vnode节点属性 class  style 事件合并更新特殊处理 其余的采取覆盖更新

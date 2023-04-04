@@ -264,6 +264,7 @@ export interface ComponentRenderContext {
 export const isReservedPrefix = (key: string) => key === '_' || key === '$'
 
 // 组件实例对象的proxyHandler  所有直接实例对象访问的key,对相关key进行处理
+// 这样会有更强的控制力,保证实例对象的安全,不会被错误使用(props的赋值,更改实例对象的内部属性)
 export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
   get({ _: instance }: ComponentRenderContext, key: string) {
     const { ctx, setupState, data, props, accessCache, type, appContext } =
