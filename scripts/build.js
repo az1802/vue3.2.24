@@ -48,7 +48,7 @@ async function run() {
     checkAllSizes(fuzzyMatchTarget(targets, buildAllMatching))
   }
 }
-
+// 根据cpu数量,并发构建生成环境的打包结果
 async function buildAll(targets) {
   await runParallel(require('os').cpus().length, targets, build)
 }
@@ -71,6 +71,7 @@ async function runParallel(maxConcurrency, source, iteratorFn) {
   return Promise.all(ret)
 }
 
+// 移除dist文件,使用rollup进行打包
 async function build(target) {
   const pkgDir = path.resolve(`packages/${target}`)
   const pkg = require(`${pkgDir}/package.json`)
