@@ -181,7 +181,9 @@ export function shallowReadonly<T extends object>(target: T): Readonly<T> {
   )
 }
 
-// 创建响应式的代理对象
+/**
+ * 创建响应式的代理对象,返回代理对象
+ **/
 function createReactiveObject(
   target: Target, //目标对象
   isReadonly: boolean,//属性是否只读

@@ -164,7 +164,7 @@ export type CustomRefFactory<T> = (
   set: (value: T) => void
 }
 
-// 自定义ref对象,会使用自定义的get set函数
+// 自定义ref对象,会使用自定义函数(track,trigger)=>({get(){},set(){}}) ,返回get,set对象可以自定义track,trigger的逻辑
 class CustomRefImpl<T> {
   public dep?: Dep = undefined
 

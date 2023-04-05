@@ -145,7 +145,7 @@ function createGetter(isReadonly = false, shallow = false) {
       return targetIsArray && isIntegerKey(key) ? res : res.value
     }
 
-    if (isObject(res)) {//值为对象时,进一步的进行响应式递归处理
+    if (isObject(res)) {//值为对象时,进一步的进行响应式递归处理,vue2会递归运行defineProperty对对象全部做影影视处理
       // Convert returned value into a proxy as well. we do the isObject check
       // here to avoid invalid value warning. Also need to lazy access readonly
       // and reactive here to avoid circular dependency.
@@ -181,7 +181,7 @@ function createSetter(shallow = false) {
       }
       // 原始值是ref类型,新设置的值飞ref对象需要进行ref.value的解耦
       if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
-        oldValue.value = value
+        oldValue.value = value //这里会触发ref对象的set,通过ref进行trigger
         return true
       }
     } else {
@@ -197,11 +197,11 @@ function createSetter(shallow = false) {
 
     const result = Reflect.set(target, key, value, receiver)
     // don't trigger if target is something up in the prototype chain of original
-    // TODO 如果目标的原型链也是一个 proxy，通过 Reflect.set 修改原型链上的属性会再次触发 setter，这种情况下就没必要触发两次 trigger 了
+    // 如果目标的原型链也是一个 proxy，通过 Reflect.set 修改原型链上的属性会再次触发 setter，这种情况下就没必要触发两次 trigger 了
     if (target === toRaw(receiver)) {
       if (!hadKey) {//新增key操作
         trigger(target, TriggerOpTypes.ADD, key, value)
-      } else if (hasChanged(value, oldValue)) {//值改变
+      } else if (hasChanged(value, oldValue)) {//值改变,才会触发trigger
         trigger(target, TriggerOpTypes.SET, key, value, oldValue)
       }
     }
@@ -227,6 +227,7 @@ function has(target: object, key: string | symbol): boolean {
   return result
 }
 
+// Object.keys,for...of...等等对象的遍历操作会触发依赖的收集,在setter的时候就会触发ITERATE_KEY进行响应式触发
 function ownKeys(target: object): (string | symbol)[] {
   track(target, TrackOpTypes.ITERATE, isArray(target) ? 'length' : ITERATE_KEY)
   return Reflect.ownKeys(target)

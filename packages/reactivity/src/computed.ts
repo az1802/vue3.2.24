@@ -41,8 +41,8 @@ export class ComputedRefImpl<T> {
     isReadonly: boolean, //只读
     isSSR: boolean
   ) {
-    // 当computed effect订阅的dep(即对应的依赖值发生变化),执行传入的scheduler函数,同时标记computed为脏数据,
-    //triggerRefValue继续传递变化,订阅此computed dep的订阅effect也会相应触发更新
+    // 当computed effect订阅的dep(即对应的依赖值发生变化)触发triggerEffect,会执行传入的scheduler函数,同时标记computed为脏数据,
+    // triggerRefValue继续传递变化,订阅此computed dep的订阅effect也会相应触发更新
     // 只要依赖的值发生变化就会触发,并不会更具computed返回的值不变而不触发更新
     this.effect = new ReactiveEffect(getter, () => {
       if (!this._dirty) {
@@ -59,7 +59,7 @@ export class ComputedRefImpl<T> {
     // the computed ref may get wrapped by other proxies e.g. readonly() #3376
     const self = toRaw(this)
     trackRefValue(self) //创建对应的dep对象并与effect互相关联
-    if (self._dirty || !self._cacheable) {
+    if (self._dirty || !self._cacheable) {//没有缓存或者依赖发生变化时,重新运行effect函数得到新的值
       self._dirty = false
       self._value = self.effect.run()! //执行getter函数,返回新的值 同时activeEffect变为self ,computed内的依赖值与改effect互相订阅
     }

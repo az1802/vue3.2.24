@@ -16,7 +16,7 @@ export class EffectScope {
   /**
    * @internal
    */
-  cleanups: (() => void)[] = [] //
+  cleanups: (() => void)[] = [] //onScopeDispose会收集消除副作用时需要运行的函数
 
   /**
    * only assigned by undetached scope

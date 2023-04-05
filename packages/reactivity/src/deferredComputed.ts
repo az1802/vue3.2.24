@@ -73,7 +73,7 @@ class DeferredComputedRefImpl<T> {
   private _get() {
     if (this._dirty) {
       this._dirty = false
-      return (this._value = this.effect.run()!)
+      return (this._value = this.effect.run()!)//
     }
     return this._value
   }
@@ -85,6 +85,7 @@ class DeferredComputedRefImpl<T> {
   }
 }
 
+//异步计算属性,会将计算任务推迟到下一个tick中执行
 export function deferredComputed<T>(getter: () => T): ComputedRef<T> {
   return new DeferredComputedRefImpl(getter) as any
 }

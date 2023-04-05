@@ -98,14 +98,14 @@ export class ReactiveEffect<T = any> {
     // 注意this.parent 当前effect运行时的前一effet 与 局部变量parent 为了避免重复effect的运行
     let parent: ReactiveEffect | undefined = activeEffect
     let lastShouldTrack = shouldTrack //缓存上一个effect运行时shouldTrack的状态,
-    while (parent) { // TODOparent 主要为scopeEffect服务
-      if (parent === this) {//
+    while (parent) { // TODOparent 主要为scopeEffect服务,避免父级effect重新运行
+      if (parent === this) {
         return
       }
       parent = parent.parent
     }
     try {
-      this.parent = activeEffect//存储迁移effect对象
+      this.parent = activeEffect//effect嵌套使用时,parent存储父级的effect对象,当子effect执行完之后activeEffect可以恢复到正确的值
       activeEffect = this
       shouldTrack = true
 
@@ -117,7 +117,7 @@ export class ReactiveEffect<T = any> {
       } else {
         cleanupEffect(this) //当前effect形成了多方互相依赖,清除当前effect相关的dep
       }
-      return this.fn()
+      return this.fn() //fn函数内可能嵌套effect,嵌套的effect运行时外层effect.parent指向子effect
     } finally {
       if (effectTrackDepth <= maxMarkerBits) {
         finalizeDepMarkers(this)// 用于对曾经跟踪过，但本次副作用函数执行时没有跟踪的依赖采取删除操作。新跟踪的 和 本轮跟踪过的都会被保留
@@ -138,7 +138,7 @@ export class ReactiveEffect<T = any> {
   stop() {
     // stopped while running itself - defer the cleanup
     if (activeEffect === this) { //运行effect函数之后运行stop函数
-      this.deferStop = true
+      this.deferStop = true //TODO
     } else if (this.active) {
       cleanupEffect(this)
       if (this.onStop) {
@@ -193,11 +193,11 @@ export function effect<T = any>(
     extend(_effect, options)
     if (options.scope) recordEffectScope(_effect, options.scope)
   }
-  if (!options || !options.lazy) { //直接运行副作用函数,lazy默认为false
+  if (!options || !options.lazy) { //大多数使用时是直接运行副作用函数,lazy默认为false
     _effect.run()
   }
 
-  // runner表示副作用运行函数
+  // runner函数关联了effect值,当runner被再次传入到effect时便有了函数开头的处理,提取fn
   const runner = _effect.run.bind(_effect) as ReactiveEffectRunner
   runner.effect = _effect
   return runner
@@ -239,6 +239,7 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
       depsMap.set(key, (dep = createDep()))
     }
 
+    //可以跟踪track的记录信息
     const eventInfo = __DEV__
       ? { effect: activeEffect, target, type, key }
       : undefined
@@ -247,7 +248,7 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   }
 }
 
-// dep队列中添加effect对象互相记录关联
+// dep队列中添加effect对象互相记录关联,多个effects会被包装为一个dep进行处理
 export function trackEffects(
   dep: Dep,
   debuggerEventExtraInfo?: DebuggerEventExtraInfo //开发环境中会有相信的 依赖相关信息
@@ -305,20 +306,20 @@ export function trigger(
     })
   } else {
     // schedule runs for SET | ADD | DELETE
-    if (key !== void 0) {
+    if (key !== void 0) {//普通对象这里就会进行依赖的收集
       deps.push(depsMap.get(key))
     }
 
     // also run for iteration key on ADD | DELETE | Map.SET
     switch (type) {
-      //TODO 增加值 同时针对iterate map array 的迭代和length 做特殊处理
+      //ADD DELETE
       case TriggerOpTypes.ADD:
         if (!isArray(target)) {
           deps.push(depsMap.get(ITERATE_KEY))
           if (isMap(target)) {
             deps.push(depsMap.get(MAP_KEY_ITERATE_KEY))
           }
-        } else if (isIntegerKey(key)) {
+        } else if (isIntegerKey(key)) {//数组push,unshift会引起length的变化触发trigger
           // new index added to array -> length changes
           deps.push(depsMap.get('length'))
         }
@@ -331,7 +332,7 @@ export function trigger(
           }
         }
         break
-      case TriggerOpTypes.SET:
+      case TriggerOpTypes.SET://对象的处理方式i map设置值
         if (isMap(target)) {
           deps.push(depsMap.get(ITERATE_KEY))
         }
@@ -375,7 +376,7 @@ export function triggerEffects(
 ) {
   // spread into array for stabilization
   const effects = isArray(dep) ? dep : [...dep]
-  // 先处理所有计算属性的 计算属性和data一样属于数据级别 后续的render watch可能会使用到,如果不先处理后续采用的值可能不是最新值
+  // !先处理所有计算属性effect,计算属性和data一样属于数据级别 后续的render函数,watchEffect可能会使用到,如果不先处理后续采用的值可能不是最新值
   for (const effect of effects) {
     if (effect.computed) {
       triggerEffect(effect, debuggerEventExtraInfo)
@@ -399,10 +400,10 @@ function triggerEffect(
       effect.onTrigger(extend({ effect }, debuggerEventExtraInfo))
     }
 
-    //运行副作用函数
+    //运行副作用函数,renderEffect 会有自己的scheduler:() => queueJob(update),
     if (effect.scheduler) {
       effect.scheduler()
-    } else {
+    } else {//同步运行
       effect.run()
     }
   }

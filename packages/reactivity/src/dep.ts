@@ -53,7 +53,9 @@ export const finalizeDepMarkers = (effect: ReactiveEffect) => {
       } else {
         deps[ptr++] = dep //dep前移保持与该effect的联系
       }
-      //  TODO  clear bits因为trackOpBit只是临时表示当前effect,当前effect fn运行完毕之后,此trackOpBit失效需要再dep中进行记录的清除 w,n只是中间dep与effect建立联系的临时使用的数据标记,处理完毕之后移除改trackOpBit位便于后续trackOpBit的正确使用
+      //clear bits
+      // 因为trackOpBit只是临时表示当前effect,当前effect fn运行完毕之后,此trackOpBit失效需要再dep中进行记录的清除
+      // w,n只是中间dep与effect建立联系的临时使用的数据标记,处理完毕之后移除改trackOpBit位便于后续trackOpBit的正确使用
       dep.w &= ~trackOpBit
       dep.n &= ~trackOpBit
     }
