@@ -217,7 +217,7 @@ function doWatch(
   } else if (isReactive(source)) {
     getter = () => source
     deep = true
-  } else if (isArray(source)) {
+  } else if (isArray(source)) {//数组形式,会对数组内的值做处理然后返回
     isMultiSource = true
     forceTrigger = source.some(s => isReactive(s) || isShallow(s))
     getter = () =>
@@ -274,7 +274,7 @@ function doWatch(
     }
   }
 
-  if (cb && deep) {
+  if (cb && deep) {//deep进一步封装对函数返回的值做递归遍历
     const baseGetter = getter
     getter = () => traverse(baseGetter())
   }
@@ -346,14 +346,15 @@ function doWatch(
   // TODO
   job.allowRecurse = !!cb
 
-  let scheduler: EffectScheduler
+  let scheduler: EffectScheduler;
+
   if (flush === 'sync') {
     scheduler = job as any // the scheduler function gets called directly
   } else if (flush === 'post') {
     scheduler = () => queuePostRenderEffect(job, instance && instance.suspense)
   } else {
     // default: 'pre'
-    scheduler = () => queuePreFlushCb(job)
+    scheduler = () => queuePreFlushCb(job) //updateComponentPreRender(instance, n2, optimized) --> flushPreFlushCbs() 先执行watch等副作用函数,这些函数可能再次的更新数据,所以需要先执行
   }
 
   const effect = new ReactiveEffect(getter, scheduler)

@@ -91,6 +91,7 @@ export function queueJob(job: SchedulerJob) {
   // allow it recursively trigger itself - it is the user's responsibility to
   // ensure it doesn't end up in an infinite loop.
   // 根据job id 找到对应的位置进行插入 先处理子组件的effect  再处理父组件的effect
+  // 当父组件更新导致子组件更新,子组件打破单向
   // isFlushing && job.allowRecurse 说就是当队列正处于更新状态中（isFlushing = true） 且允许递归调用（ job.allowRecurse = true）时，将搜索起始位置加一，无法搜索到自身，也就是允许递归调用了。
   if (
     (!queue.length ||
@@ -111,6 +112,7 @@ export function queueJob(job: SchedulerJob) {
 }
 
 // 队列并未开始已执行时 将flushJobs 放入到微任务中
+// vue 3 完全抛弃了除了 promise 之外的异步方案，不再支持vue 2 的 Promise > MutationObserver > setImmediate > setTimeout 其他三种异步操作了。
 function queueFlush() {
   if (!isFlushing && !isFlushPending) {
     isFlushPending = true
@@ -156,7 +158,7 @@ export function queuePostFlushCb(cb: SchedulerJobs) {
   queueCb(cb, activePostFlushCbs, pendingPostFlushCbs, postFlushIndex)
 }
 
-// 清空任务队列中的回调
+// 递归清楚pre类型的回调任务
 export function flushPreFlushCbs(
   seen?: CountMap,
   parentJob: SchedulerJob | null = null
@@ -189,6 +191,7 @@ export function flushPreFlushCbs(
   }
 }
 
+// 清除类型为post的回调任务(一些需要渲染完成后再执行的钩子函数都会在这个阶段执行，比如 mounted hook 等等。)
 export function flushPostFlushCbs(seen?: CountMap) {
   // flush any pre cbs queued during the flush (e.g. pre watchers)
   flushPreFlushCbs()
@@ -304,7 +307,7 @@ function checkRecursiveUpdates(seen: CountMap, fn: SchedulerJob) {
     seen.set(fn, 1)
   } else {
     const count = seen.get(fn)!
-    if (count > RECURSION_LIMIT) {
+    if (count > RECURSION_LIMIT) { //大于100次调用会被判定为递归更新
       const instance = fn.ownerInstance
       const componentName = instance && getComponentName(instance.type)
       warn(
