@@ -105,7 +105,7 @@ const KeepAliveImpl: ComponentOptions = {
       }
     }
 
-    const cache: Cache = new Map()
+    const cache: Cache = new Map()//缓存vnode节点
     const keys: Keys = new Set()
     let current: VNode | null = null
 
@@ -123,8 +123,11 @@ const KeepAliveImpl: ComponentOptions = {
         o: { createElement }
       }
     } = sharedContext
+
+    // 创建一个隐藏容器
     const storageContainer = createElement('div')
 
+    // processComponent中针对keep-alive组件调用activate钩子函数
     sharedContext.activate = (vnode, container, anchor, isSVG, optimized) => {
       const instance = vnode.component!
       move(vnode, container, anchor, MoveType.ENTER, parentSuspense) // 将缓存的组件挂载到容器中
@@ -189,6 +192,7 @@ const KeepAliveImpl: ComponentOptions = {
       _unmount(vnode, instance, parentSuspense, true)
     }
 
+    // 根据name清楚缓存的组件
     function pruneCache(filter?: (name: string) => boolean) {
       cache.forEach((vnode, key) => {
         const name = getComponentName(vnode.type as ConcreteComponent)
@@ -198,6 +202,7 @@ const KeepAliveImpl: ComponentOptions = {
       })
     }
 
+    // 清除组件非当前组件时,进行组件的解绑
     function pruneCacheEntry(key: CacheKey) {
       const cached = cache.get(key) as VNode
       if (!current || cached.type !== current.type) {
@@ -226,10 +231,12 @@ const KeepAliveImpl: ComponentOptions = {
     let pendingCacheKey: CacheKey | null = null
     const cacheSubtree = () => {
       // fix #1621, the pendingCacheKey could be 0
-      if (pendingCacheKey != null) {
+      if (pendingCacheKey != null) {//onMounted,onUpdated调用此时instance.subTree已经存在
         cache.set(pendingCacheKey, getInnerChild(instance.subTree))
       }
     }
+
+    // keepLive组件绑定和更新时缓存vnode
     onMounted(cacheSubtree)
     onUpdated(cacheSubtree)
 
@@ -237,7 +244,7 @@ const KeepAliveImpl: ComponentOptions = {
       cache.forEach(cached => {
         const { subTree, suspense } = instance
         const vnode = getInnerChild(subTree)
-        if (cached.type === vnode.type) {
+        if (cached.type === vnode.type) {//当前组件解绑
           // current instance will be unmounted as part of keep-alive's unmount
           resetShapeFlag(vnode)
           // but invoke its deactivated hook here
@@ -264,7 +271,7 @@ const KeepAliveImpl: ComponentOptions = {
         }
         current = null
         return children
-      } else if (
+      } else if ( //keepalive 下只能是component 和 suspense组件
         !isVNode(rawVNode) ||
         (!(rawVNode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) &&
           !(rawVNode.shapeFlag & ShapeFlags.SUSPENSE))
@@ -323,12 +330,12 @@ const KeepAliveImpl: ComponentOptions = {
           // recursively update transition hooks on subTree
           setTransitionHooks(vnode, vnode.transition!)
         }
-        // avoid vnode being mounted as fresh
+        // avoid vnode being mounted as fresh 当一个节点被标记为 COMPONENT_KEPT_ALIVE 时，会在 processComponent 时进行特殊处理
         vnode.shapeFlag |= ShapeFlags.COMPONENT_KEPT_ALIVE
         // make this key the freshest  保证key值在最新的位置,调整超出max被移除的顺序
         keys.delete(key)
         keys.add(key)
-      } else {
+      } else {//除此绑定组件
         keys.add(key)
         // prune oldest entry
         if (max && keys.size > parseInt(max as string, 10)) {
@@ -435,6 +442,7 @@ function injectToKeepAliveRoot(
   }, target)
 }
 
+// 重置节点的shapeFlag,下次切换时会执行组件的unmount
 function resetShapeFlag(vnode: VNode) {
   let shapeFlag = vnode.shapeFlag
   if (shapeFlag & ShapeFlags.COMPONENT_SHOULD_KEEP_ALIVE) {

@@ -105,17 +105,18 @@ const hasExplicitCallback = (
     : false
 }
 
+// 处理transition传入的参数
 export function resolveTransitionProps(
   rawProps: TransitionProps
 ): BaseTransitionProps<Element> {
   const baseProps: BaseTransitionProps<Element> = {}
-  for (const key in rawProps) {
+  for (const key in rawProps) {//将使用js处理transition相关的配置提取至baseProps
     if (!(key in DOMTransitionPropsValidators)) {
       ;(baseProps as any)[key] = (rawProps as any)[key]
     }
   }
 
-  if (rawProps.css === false) {
+  if (rawProps.css === false) { //js的形式处理
     return baseProps
   }
 
@@ -154,9 +155,11 @@ export function resolveTransitionProps(
     }
   }
 
+  // 处理transition 持续时间
   const durations = normalizeDuration(duration)
   const enterDuration = durations && durations[0]
   const leaveDuration = durations && durations[1]
+  // transition 钩子函数
   const {
     onBeforeEnter,
     onEnter,
@@ -190,7 +193,9 @@ export function resolveTransitionProps(
       const hook = isAppear ? onAppear : onEnter
       const resolve = () => finishEnter(el, isAppear, done)
       callHook(hook, [el, resolve])
+      // 下一帧渲染时
       nextFrame(() => {
+        // 删除 v-enter-from 类名
         removeTransitionClass(el, isAppear ? appearFromClass : enterFromClass)
         if (__COMPAT__ && legacyClassEnabled) {
           removeTransitionClass(
@@ -198,7 +203,10 @@ export function resolveTransitionProps(
             isAppear ? legacyAppearFromClass : legacyEnterFromClass
           )
         }
+        // 添加 v-enter-to 类名
         addTransitionClass(el, isAppear ? appearToClass : enterToClass)
+
+        // 动画结束时，执行 resolve 函数，即删除 v-enter-to、v-enter-active 类名
         if (!hasExplicitCallback(hook)) {
           whenTransitionEnds(el, type, enterDuration, resolve)
         }
@@ -207,7 +215,7 @@ export function resolveTransitionProps(
   }
 
   return extend(baseProps, {
-    onBeforeEnter(el) {
+    onBeforeEnter(el) {//元素被插入到DOM之前被调用
       callHook(onBeforeEnter, [el])
       addTransitionClass(el, enterFromClass)
       if (__COMPAT__ && legacyClassEnabled) {
@@ -223,7 +231,7 @@ export function resolveTransitionProps(
       }
       addTransitionClass(el, appearActiveClass)
     },
-    onEnter: makeEnterHook(false),
+    onEnter: makeEnterHook(false),//元素被插入到DOM之后的下一帧
     onAppear: makeEnterHook(true),
     onLeave(el: Element & { _isLeaving?: boolean }, done) {
       el._isLeaving = true
@@ -326,6 +334,7 @@ function nextFrame(cb: () => void) {
 
 let endId = 0
 
+// transition结束时
 function whenTransitionEnds(
   el: Element & { _endId?: number },
   expectedType: TransitionProps['type'] | undefined,

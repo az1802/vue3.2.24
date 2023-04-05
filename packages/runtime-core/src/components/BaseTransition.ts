@@ -95,6 +95,7 @@ export interface TransitionElement {
   _leaveCb?: PendingCallback
 }
 
+// transition组件的状态
 export function useTransitionState(): TransitionState {
   const state: TransitionState = {
     isMounted: false,
@@ -143,7 +144,7 @@ const BaseTransitionImpl: ComponentOptions = {
 
     let prevTransitionKey: any
 
-    return () => {
+    return () => { //重写render函数
        // 获取子节点
       const children =
         slots.default && getTransitionRawChildren(slots.default(), true)
@@ -151,6 +152,7 @@ const BaseTransitionImpl: ComponentOptions = {
         return
       }
 
+      // 找到第一个非注释节点的子节点
       let child: VNode = children[0]
       if (children.length > 1) {
         let hasFound = false
@@ -174,7 +176,7 @@ const BaseTransitionImpl: ComponentOptions = {
 
       // there's no need to track reactivity for these props so use the raw
       // props for a bit better perf
-       // 这里 props 不需要响应式追踪，为了更好的性能，去除响应式
+      // 这里 props 不需要响应式追踪，为了更好的性能，去除响应式
       const rawProps = toRaw(props)
       const { mode } = rawProps
       // check mode
@@ -188,7 +190,7 @@ const BaseTransitionImpl: ComponentOptions = {
         warn(`invalid <transition> mode: ${mode}`)
       }
 
-      if (state.isLeaving) {
+      if (state.isLeaving) {//消失状态,对keep-live组件进行特殊处理,会返回keep-alive组件vnode
         return emptyPlaceholder(child)
       }
 
@@ -232,13 +234,14 @@ const BaseTransitionImpl: ComponentOptions = {
         oldInnerChild.type !== Comment &&
         (!isSameVNodeType(innerChild, oldInnerChild) || transitionKeyChanged)
       ) {
+        // 获取离开状态的调用函数
         const leavingHooks = resolveTransitionHooks(
           oldInnerChild,
           rawProps,
           state,
           instance
         )
-        // update old tree's hooks in case of dynamic transition
+        // update old tree's hooks in case of dynamic transition  为子节点添加离开 hooks 属性
         setTransitionHooks(oldInnerChild, leavingHooks)
         // switching between different views
         if (mode === 'out-in') {
@@ -256,10 +259,12 @@ const BaseTransitionImpl: ComponentOptions = {
             earlyRemove,
             delayedLeave
           ) => {
+            // in-out 模式状态切换，延迟移除
             const leavingVNodesCache = getLeavingNodesForType(
               state,
               oldInnerChild
             )
+            // 先缓存需要移除的节点
             leavingVNodesCache[String(oldInnerChild.key)] = oldInnerChild
             // early removal callback
             el._leaveCb = () => {
@@ -304,6 +309,7 @@ function getLeavingNodesForType(
 
 // The transition hooks are attached to the vnode as vnode.transition
 // and will be called at appropriate timing in the renderer.
+// 根据state状态获取对应的hook函数
 export function resolveTransitionHooks(
   vnode: VNode,
   props: BaseTransitionProps<any>,
@@ -488,6 +494,8 @@ export function setTransitionHooks(vnode: VNode, hooks: TransitionHooks) {
   }
 }
 
+
+// 处理子节点中fragment标签和注释节点
 export function getTransitionRawChildren(
   children: VNode[],
   keepComment: boolean = false,
