@@ -105,6 +105,7 @@ function triggerEvent(
   }
 }
 
+// suspense组件绑定
 function mountSuspense(
   vnode: VNode,
   container: RendererElement,
@@ -120,7 +121,7 @@ function mountSuspense(
     p: patch,
     o: { createElement }
   } = rendererInternals
-  const hiddenContainer = createElement('div')
+  const hiddenContainer = createElement('div')//创建dom节点挂载fallback和异步组件
   const suspense = (vnode.suspense = createSuspenseBoundary(
     vnode,
     parentSuspense,
@@ -134,7 +135,7 @@ function mountSuspense(
     rendererInternals
   ))
 
-  // start mounting the content subtree in an off-dom container
+  // start mounting the content subtree in an off-dom container 挂载fallback内容
   patch(
     null,
     (suspense.pendingBranch = vnode.ssContent!),
@@ -165,7 +166,7 @@ function mountSuspense(
     )
     setActiveBranch(suspense, vnode.ssFallback!)
   } else {
-    // Suspense has no async deps. Just resolve.
+    // Suspense has no async deps. Just resolve. 如果 suspense 没有异步依赖，直接调用 resolve
     suspense.resolve()
   }
 }
@@ -184,10 +185,11 @@ function patchSuspense(
   const suspense = (n2.suspense = n1.suspense)!
   suspense.vnode = n2
   n2.el = n1.el
-  const newBranch = n2.ssContent!
-  const newFallback = n2.ssFallback!
+  const newBranch = n2.ssContent! // 最新的 default 分支
+  const newFallback = n2.ssFallback!  // 最新的 fallback 分支
 
   const { activeBranch, pendingBranch, isInFallback, isHydrating } = suspense
+   // 存在旧的 pendingBranch
   if (pendingBranch) {
     suspense.pendingBranch = newBranch
     if (isSameVNodeType(newBranch, pendingBranch)) {
@@ -203,9 +205,9 @@ function patchSuspense(
         slotScopeIds,
         optimized
       )
-      if (suspense.deps <= 0) {
+      if (suspense.deps <= 0) {// 没有依赖则直接 resolve
         suspense.resolve()
-      } else if (isInFallback) {
+      } else if (isInFallback) { // // 处于 fallback 中，激活分支和 newFallback 进行 diff
         patch(
           activeBranch,
           newFallback,
@@ -387,6 +389,7 @@ export interface SuspenseBoundary {
 
 let hasWarned = false
 
+// 创建suspense组件边界
 function createSuspenseBoundary(
   vnode: VNode,
   parent: SuspenseBoundary | null,
@@ -417,6 +420,7 @@ function createSuspenseBoundary(
     o: { parentNode, remove }
   } = rendererInternals
 
+  // 异步组件超时时间
   const timeout = toNumber(vnode.props && vnode.props.timeout)
   const suspense: SuspenseBoundary = {
     vnode,
@@ -426,17 +430,19 @@ function createSuspenseBoundary(
     container,
     hiddenContainer,
     anchor,
-    deps: 0,
+    deps: 0,//依赖的异步dep属性
     pendingId: 0,
     timeout: typeof timeout === 'number' ? timeout : -1,
-    activeBranch: null,
-    pendingBranch: null,
+    activeBranch: null,//当前显示的组件
+    pendingBranch: null,//待更新的组件
     isInFallback: true,
     isHydrating,
     isUnmounted: false,
     effects: [],
 
-    resolve(resume = false) {
+    resolve(resume = false) {//异步组件加载完成后调用
+
+      // 没有异步组件或suspense已经被卸载,resolve会报错
       if (__DEV__) {
         if (!resume && !suspense.pendingBranch) {
           throw new Error(
@@ -451,8 +457,8 @@ function createSuspenseBoundary(
       }
       const {
         vnode,
-        activeBranch,
-        pendingBranch,
+        activeBranch,// 当前激活的分支，就是挂载到页面中的 vnode
+        pendingBranch,// 代表的是正处于 pending 状态的分支，一般指还未被激活的 default 插槽内的内容中的 vnode
         pendingId,
         effects,
         parentComponent,
@@ -463,6 +469,7 @@ function createSuspenseBoundary(
         suspense.isHydrating = false
       } else if (!resume) {
 
+        //存在transition组件时处理其动画效果
         const delayEnter =
           activeBranch &&
           pendingBranch!.transition &&
@@ -489,6 +496,7 @@ function createSuspenseBoundary(
         }
       }
 
+      // 将 pendingBranch 设置为激活分支,调整pending状态
       setActiveBranch(suspense, pendingBranch!)
       suspense.pendingBranch = null
       suspense.isInFallback = false
@@ -496,7 +504,7 @@ function createSuspenseBoundary(
       // flush buffered effects
       // check if there is a pending parent suspense
       let parent = suspense.parent
-      let hasUnresolvedAncestor = false
+      let hasUnresolvedAncestor = false  // 标记是否还有未处理完成的 suspense
       while (parent) {//遍历父节点，找到是否还有未完成的 suspense 节点，将当前的渲染 effects 合并到父节点上进行统一更新。
         if (parent.pendingBranch) {
           // found a pending parent suspense, merge buffered post jobs
@@ -507,7 +515,7 @@ function createSuspenseBoundary(
         }
         parent = parent.parent
       }
-      // no pending parent suspense, flush all jobs
+      // no pending parent suspense, flush all jobs 全部处理完suspense，一次性 queuePostFlushCb
       if (!hasUnresolvedAncestor) {
         queuePostFlushCb(effects)
       }
@@ -577,8 +585,8 @@ function createSuspenseBoundary(
     next() {
       return suspense.activeBranch && next(suspense.activeBranch)
     },
-
-    registerDep(instance, setupRenderEffect) { //将子组件的promise对象挂在到 组件实例上
+    //在渲染器执行 mountComponent 的时候，如果存在 asyncDep 变量，则会调用 suspense 上的 registerDep 方法，并为 default 中的插槽节点创建了一个占位符：
+    registerDep(instance, setupRenderEffect) {
       const isInPendingSuspense = !!suspense.pendingBranch
       if (isInPendingSuspense) {
         // deps 这里会被递增，记录依赖的异步数量
@@ -586,7 +594,7 @@ function createSuspenseBoundary(
       }
       const hydratedEl = instance.vnode.el
 
-       // asyncDep promise 执行
+       // asyncDep promise setupStatefulComponent会根据setup返回的结果做处理,instance.asyncDep = setupResult
       instance
         .asyncDep!.catch(err => {
           handleError(err, instance, ErrorCodes.SETUP_FUNCTION)
@@ -768,10 +776,12 @@ function normalizeSuspenseSlot(s: any) {
   return s
 }
 
+//queuePostRenderEffect 在 suspense 模式下指的是 queueEffectWithSuspense
 export function queueEffectWithSuspense(
   fn: Function | Function[],
   suspense: SuspenseBoundary | null
 ): void {
+  // 针对 suspense 处理，会将渲染函数推送到 suspense.effects 中
   if (suspense && suspense.pendingBranch) {
     if (isArray(fn)) {
       suspense.effects.push(...fn)
@@ -783,6 +793,7 @@ export function queueEffectWithSuspense(
   }
 }
 
+// 设置当前显示的节点
 function setActiveBranch(suspense: SuspenseBoundary, branch: VNode) {
   suspense.activeBranch = branch
   const { vnode, parentComponent } = suspense
