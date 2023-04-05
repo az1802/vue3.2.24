@@ -21,7 +21,7 @@ export function provide<T>(key: InjectionKey<T> | string | number, value: T) {
     // 默认组件实例继承父组件实例对象的provides object 当自己需要provide时则创建新的provides对象,然后再进行添加,因此给予原型链的向上查找,相同的key会使用离自己最近的父组件
     const parentProvides =
       currentInstance.parent && currentInstance.parent.provides
-    if (parentProvides === provides) {//
+    if (parentProvides === provides) {//如果当前组件有对外提供provide则基于parentProvides为原型构造一个新的对象,这样后代组件使用时会沿着原型链向父级查找对应的key
       provides = currentInstance.provides = Object.create(parentProvides)
     }
     // TS doesn't allow symbol as index type
@@ -47,17 +47,19 @@ export function inject(
 ) {
   // fallback to `currentRenderingInstance` so that this can be called in
   // a functional component
+   // 获取当前组件实例
   const instance = currentInstance || currentRenderingInstance
   if (instance) {
     // #2400
     // to support `app.use` plugins,
     // fallback to appContext's `provides` if the instance is at root
+      // 获取父组件上的 provides 对象
     const provides =
       instance.parent == null
         ? instance.vnode.appContext && instance.vnode.appContext.provides
         : instance.parent.provides
 
-    if (provides && (key as string | symbol) in provides) {
+    if (provides && (key as string | symbol) in provides) { // 如果能取到，则返回值
       // TS doesn't allow symbol as index type
       return provides[key as string]
     } else if (arguments.length > 1) { //存在默认值的情况处理
