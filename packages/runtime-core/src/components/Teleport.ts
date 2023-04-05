@@ -28,6 +28,8 @@ const isTeleportDisabled = (props: VNode['props']): boolean =>
 const isTargetSVG = (target: RendererElement): boolean =>
   typeof SVGElement !== 'undefined' && target instanceof SVGElement
 
+
+// 不同平台查询dom的函数不一样,select为平台相关的查询dom方法
 const resolveTarget = <T = RendererElement>(
   props: TeleportProps | null,
   select: RendererOptions['querySelector']
@@ -96,7 +98,7 @@ export const TeleportImpl = {
     }
 
     if (n1 == null) {
-      // insert anchors in the main view
+      // insert anchors in the main view 向主视图中插入占位注释节点和对应的锚点
       const placeholder = (n2.el = __DEV__
         ? createComment('teleport start')
         : createText(''))
@@ -105,7 +107,9 @@ export const TeleportImpl = {
         : createText(''))
       insert(placeholder, container, anchor)
       insert(mainAnchor, container, anchor)
+      // 获取需要挂载的位置元素，如果目标元素不存在于DOM中，则返回 null
       const target = (n2.target = resolveTarget(n2.props, querySelector))
+      // 目标挂载节点的锚点
       const targetAnchor = (n2.targetAnchor = createText(''))
       if (target) {
         insert(targetAnchor, target)
@@ -117,7 +121,7 @@ export const TeleportImpl = {
 
       const mount = (container: RendererElement, anchor: RendererNode) => {
         // Teleport *always* has Array children. This is enforced in both the
-        // compiler and vnode children normalization.
+        // compiler and vnode children normalization. 子节点需要是个数组
         if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
           mountChildren(
             children as VNodeArrayChildren,
@@ -132,9 +136,11 @@ export const TeleportImpl = {
         }
       }
 
+      //如果禁用 teleport 则直接挂载到当前渲染节点中
       if (disabled) {
         mount(container, mainAnchor)
       } else if (target) {
+      // 否则，以 targetAnchor 为参照物挂载到target下
         mount(target, targetAnchor)
       }
     } else {
@@ -148,7 +154,7 @@ export const TeleportImpl = {
       const currentAnchor = wasDisabled ? mainAnchor : targetAnchor
       isSVG = isSVG || isTargetSVG(target)
 
-      if (dynamicChildren) {
+      if (dynamicChildren) {//包含动态子节点
         // fast path when the teleport happens to be a block root
         patchBlockChildren(
           n1.dynamicChildren!,
@@ -181,6 +187,7 @@ export const TeleportImpl = {
         if (!wasDisabled) {
           // enabled -> disabled
           // move into main container
+          // 根据前面插入的注释节点,移动到新的元素中
           moveTeleport(
             n2,
             container,
@@ -192,6 +199,7 @@ export const TeleportImpl = {
       } else {
         // target changed
         if ((n2.props && n2.props.to) !== (n1.props && n1.props.to)) {
+          // 新的目标节点
           const nextTarget = (n2.target = resolveTarget(
             n2.props,
             querySelector
@@ -213,7 +221,7 @@ export const TeleportImpl = {
           }
         } else if (wasDisabled) {
           // disabled -> enabled
-          // move into teleport target
+          // move into teleport target 移动到目标元素中
           moveTeleport(
             n2,
             target,
@@ -226,6 +234,7 @@ export const TeleportImpl = {
     }
   },
 
+  //组件unmount时会调用remove函数
   remove(
     vnode: VNode,
     parentComponent: ComponentInternalInstance | null,
@@ -236,13 +245,15 @@ export const TeleportImpl = {
   ) {
     const { shapeFlag, children, anchor, targetAnchor, target, props } = vnode
 
+    // 如果存在 target，移除 targetAnchor
     if (target) {
       hostRemove(targetAnchor!)
     }
 
     // an unmounted teleport should always remove its children if not disabled
+    // 在未禁用状态下，需要卸载 teleport 的子元素
     if (doRemove || !isTeleportDisabled(props)) {
-      hostRemove(anchor!)
+      hostRemove(anchor!)//移除组件位置对应的注释dom
       if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
         for (let i = 0; i < (children as VNode[]).length; i++) {
           const child = (children as VNode[])[i]
@@ -268,6 +279,7 @@ export const enum TeleportMoveTypes {
   REORDER // moved in the main view
 }
 
+// 移动节点到新的目标节点中
 function moveTeleport(
   vnode: VNode,
   container: RendererElement,
