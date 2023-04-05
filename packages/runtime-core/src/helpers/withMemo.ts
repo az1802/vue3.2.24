@@ -1,17 +1,18 @@
 import { hasChanged } from '@vue/shared'
 import { currentBlock, isBlockTreeEnabled, VNode } from '../vnode'
 
+// 通过新旧值的比较来决定节点是否需要更新
 export function withMemo(
   memo: any[],
   render: () => VNode<any, any>,
   cache: any[],//render函数存入的cache[]
   index: number//下标值用来获取具体的值
 ) {
-  const cached = cache[index] as VNode | undefined
+  const cached = cache[index] as VNode | undefined //cache的vnode
   if (cached && isMemoSame(cached, memo)) {//混存值的比较
     return cached
   }
-  const ret = render()
+  const ret = render() //值发生变化或者缓存不存在,重新运行render函数
 
   // shallow clone
   ret.memo = memo.slice()
@@ -32,7 +33,6 @@ export function isMemoSame(cached: VNode, memo: any[]) {
   }
 
   // make sure to let parent block track it when returning cached
-  // TODO 什么时候处理
   if (isBlockTreeEnabled > 0 && currentBlock) {
     currentBlock.push(cached)
   }

@@ -16,7 +16,7 @@ export const transformOnce: NodeTransform = (node, context) => {
     context.helper(SET_BLOCK_TRACKING)
     return () => {
       context.inVOnce = false
-      const cur = context.currentNode as ElementNode | IfNode | ForNode //TODO 这里为什么是cur 而非直接引用node 可能是担心node节点被移除
+      const cur = context.currentNode as ElementNode | IfNode | ForNode
       if (cur.codegenNode) {
         cur.codegenNode = context.cache(cur.codegenNode, true /* isVNode */)
       }

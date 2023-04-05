@@ -151,7 +151,7 @@ export function createTransformContext(
 ): TransformContext {
   const nameMatch = filename.replace(/\?.*$/, '').match(/([^/\\]+)\.\w+$/)
   const context: TransformContext = {
-    // options
+    // options 选项配置
     selfName: nameMatch && capitalize(camelize(nameMatch[1])), //TODO 什么时候使用文件转换
     prefixIdentifiers,
     hoistStatic,
@@ -159,6 +159,7 @@ export function createTransformContext(
     nodeTransforms,
     directiveTransforms,
     transformHoist, //静态节点转换
+
     isBuiltInComponent,
     isCustomElement,
     expressionPlugins, //表达式处理插件,可以用来支持一些新的语法
@@ -174,7 +175,7 @@ export function createTransformContext(
     onWarn,
     compatConfig,
 
-    // state
+    // state 状态数据
     root,
     helpers: new Map(), //辅助函数使用的次数,
     components: new Set(),
