@@ -607,7 +607,7 @@ export function setupComponent(
 
   const { props, children } = instance.vnode
   const isStateful = isStatefulComponent(instance)
-  // TODO 执行setup方法前,先处理props slots
+  //执行setup方法前,先处理props slots,两者会被作为setup函数的参数
   initProps(instance, props, isStateful, isSSR)
   initSlots(instance, children)
 
@@ -734,7 +734,7 @@ export function handleSetupResult(
     } else {
       instance.render = setupResult as InternalRenderFunction
     }
-  } else if (isObject(setupResult)) {//返回对象或被当做data处理
+  } else if (isObject(setupResult)) {//返回对象或被当做data处理,排除vnode这种情况
     if (__DEV__ && isVNode(setupResult)) {
       warn(
         `setup() should not return VNodes directly - ` +
@@ -746,7 +746,7 @@ export function handleSetupResult(
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
       instance.devtoolsRawSetupState = setupResult
     }
-    instance.setupState = proxyRefs(setupResult) //方便用户直接访问ref数据
+    instance.setupState = proxyRefs(setupResult) //返回对象加一层代理用于处理ref的访问,在render函数中访问时不用写.value
     if (__DEV__) {
       exposeSetupStateOnRenderContext(instance)
     }

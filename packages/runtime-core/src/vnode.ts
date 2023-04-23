@@ -276,6 +276,7 @@ export function setBlockTracking(value: number) {
   isBlockTreeEnabled += value
 }
 
+// 将currentBlock收集到的动态节点的信息,放到dynamicChildren中
 function setupBlock(vnode: VNode) {
   // save current block children on the block vnode
   // 在 vnode 上保留当前 Block 收集的动态子节点
@@ -285,7 +286,7 @@ function setupBlock(vnode: VNode) {
   // 当前 Block 恢复到父 Block
   closeBlock() //弹出currentBlock
   // a block is always going to be patched, so track it as a child of its
-  // parent block
+  // parent block 当前vnode作为父级block收集的动态vnode节点
   if (isBlockTreeEnabled > 0 && currentBlock) { //当前vnode节点为父级的动态子节点,所有这里push到currentBlock中
     currentBlock.push(vnode)
   }
@@ -343,6 +344,7 @@ export function createBlock(
   )
 }
 
+// 判断是否是VNode节点
 export function isVNode(value: any): value is VNode {
   return value ? value.__v_isVNode === true : false
 }
@@ -420,7 +422,7 @@ function createBaseVNode(
   const vnode = {
     __v_isVNode: true,
     __v_skip: true,
-    type, //节点类型 或者是组件
+    type, //节点类型 或者是 组件函数
     props,//节点静态属性
     key: props && normalizeKey(props),//提取props中的key属性
     ref: props && normalizeRef(props),//提取props中的refs属性
@@ -505,7 +507,7 @@ function _createVNode(
   props: (Data & VNodeProps) | null = null, //节点属性
   children: unknown = null,
   patchFlag: number = 0,
-  dynamicProps: string[] | null = null, //动态属性
+  dynamicProps: string[] | null = null, //节点上的动态属性
   isBlockNode = false
 ): VNode {
   if (!type || type === NULL_DYNAMIC_COMPONENT) { //动态组件 会暂时以注释节点的类型展示
@@ -562,7 +564,7 @@ function _createVNode(
     }
   }
 
-  // encode the vnode type information into a bitmap
+  // encode the vnode type information into a bitmap 根据传入的type确定组件的类型
   const shapeFlag = isString(type)
     ? ShapeFlags.ELEMENT
     : __FEATURE_SUSPENSE__ && isSuspense(type)
@@ -570,9 +572,9 @@ function _createVNode(
     : isTeleport(type)
     ? ShapeFlags.TELEPORT
     : isObject(type)
-    ? ShapeFlags.STATEFUL_COMPONENT
+    ? ShapeFlags.STATEFUL_COMPONENT //有状态组件
     : isFunction(type)
-    ? ShapeFlags.FUNCTIONAL_COMPONENT
+    ? ShapeFlags.FUNCTIONAL_COMPONENT//无状态组件
     : 0
 
   if (__DEV__ && shapeFlag & ShapeFlags.STATEFUL_COMPONENT && isProxy(type)) {
@@ -767,7 +769,7 @@ export function normalizeChildren(vnode: VNode, children: unknown) {
     children = null
   } else if (isArray(children)) {
     type = ShapeFlags.ARRAY_CHILDREN
-  } else if (typeof children === 'object') {//children为对象时表示是插槽节点
+  } else if (typeof children === 'object') {
     if (shapeFlag & (ShapeFlags.ELEMENT | ShapeFlags.TELEPORT)) {
       // Normalize slot to plain children for plain element and Teleport
       const slot = (children as any).default
@@ -778,7 +780,7 @@ export function normalizeChildren(vnode: VNode, children: unknown) {
         slot._c && (slot._d = true)
       }
       return
-    } else {
+    } else {//组件的组节点在编译时会被转换为对象的形式
       type = ShapeFlags.SLOTS_CHILDREN
       const slotFlag = (children as RawSlots)._
       if (!slotFlag && !(InternalObjectKey in children!)) {

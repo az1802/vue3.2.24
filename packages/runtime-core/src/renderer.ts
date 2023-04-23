@@ -377,7 +377,7 @@ function baseCreateRenderer(
       n1 = null
     }
 
-    if (n2.patchFlag === PatchFlags.BAIL) { //全量diff
+    if (n2.patchFlag === PatchFlags.BAIL) { //全量diff,不存在优化策略
       optimized = false
       n2.dynamicChildren = null
     }
@@ -1253,7 +1253,7 @@ function baseCreateRenderer(
       if (__DEV__) {
         startMeasure(instance, `init`)
       }
-      setupComponent(instance) //初始化 instance 上的 props, slots, 执行组件的 setup 函数...
+      setupComponent(instance) //初始化 instance 上的 props, slots, 执行组件的 setup 函数,完成组件options的处理
       if (__DEV__) {
         endMeasure(instance, `init`)
       }
@@ -1261,7 +1261,7 @@ function baseCreateRenderer(
 
     // setup() is async. This component relies on async logic to be resolved
     // before proceeding
-    // setup函数为异步函数时,先用注释节点进行占位
+    // setup函数为异步函数时,先用注释节点进行占位,同时将renderEffect注册到parentSuspense的dep中
     if (__FEATURE_SUSPENSE__ && instance.asyncDep) {
       parentSuspense && parentSuspense.registerDep(instance, setupRenderEffect)
 
@@ -1330,7 +1330,7 @@ function baseCreateRenderer(
     }
   }
 
-  // 初始化组件更新的effect,然后运行update进行组件的更新
+  // 初始化组件的renderEffect,然后运行update进行组件的更新
   const setupRenderEffect: SetupRenderEffectFn = (
     instance,
     initialVNode,
@@ -1350,7 +1350,12 @@ function baseCreateRenderer(
 
         toggleRecurse(instance, false) //TODO 组件更新的时候避免组件递归更新形成死循环
         // beforeMount hook
-        if (bm) {//TODO onBeforeMount等hooks this不指向实例对象
+        /**
+         * onBeforeMount等hooks this不指向实例对象,其实这里也可以使用bind进行实例的绑定只是没有必要
+         * 这样做的目的是为了优化Vue.js的内部实现，使其更加高效。在Vue.js 3中，由于组件实例和响应式数据是分离的，
+         * 组件实例不再具有响应式能力，因此在生命周期钩子函数中不再需要使用响应式数据，也不需要访问组件实例。
+         */
+        if (bm) {
           invokeArrayFns(bm)
         }
         // onVnodeBeforeMount

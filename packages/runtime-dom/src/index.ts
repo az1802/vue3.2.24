@@ -99,6 +99,7 @@ export const createApp = ((...args) => {
         }
       }
     }
+    console.log(123);
 
     // clear content before mounting
     container.innerHTML = ''

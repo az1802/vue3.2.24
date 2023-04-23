@@ -75,7 +75,7 @@ export function renderComponentRoot( //执行组件render函数,生成vnode树�
     if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) { //组件vnode
       // withProxy is a proxy with a different `has` trap only for
       // runtime-compiled render functions using `with` block.
-      const proxyToUse = withProxy || proxy //TODO
+      const proxyToUse = withProxy || proxy
       result = normalizeVNode(
         render!.call( //render函数后续参数的作用
           proxyToUse,
@@ -88,8 +88,7 @@ export function renderComponentRoot( //执行组件render函数,生成vnode树�
         )
       )
       fallthroughAttrs = attrs
-    } else {
-      // functional  函数组件的处理
+    } else { //无状态组件,
       const render = Component as FunctionalComponent
       // in dev, mark attrs accessed if optional props (attrs === props)
       if (__DEV__ && attrs === props) {
@@ -117,10 +116,10 @@ export function renderComponentRoot( //执行组件render函数,生成vnode树�
         ? attrs
         : getFunctionalFallthrough(attrs)
     }
-  } catch (err) {
+  } catch (err) {//render函数出错,会使用注释节点进行占位替代,只影响该组件的渲染,不影响其他组件
     blockStack.length = 0
     handleError(err, instance, ErrorCodes.RENDER_FUNCTION)
-    result = createVNode(Comment) ;//render函数出错,会使用注释节点进行占位替代,只影响该组件的渲染,不影响其他组件
+    result = createVNode(Comment) ;
   }
 
   // attr merging

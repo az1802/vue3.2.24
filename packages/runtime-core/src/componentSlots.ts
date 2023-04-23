@@ -137,7 +137,6 @@ export const initSlots = (
 ) => {
   // shapeFlag 有 SLOTS_CHILDREN 类型
   if (instance.vnode.shapeFlag & ShapeFlags.SLOTS_CHILDREN) {
-     // 对于我们的示例中，slotFlag 类型是 STABLE
     const type = (children as RawSlots)._
     if (type) {
       // users can get the shallow readonly version of the slots object through `this.$slots`,

@@ -154,19 +154,19 @@ export type NormalizedPropsOptions = [NormalizedProps, string[]] | []
 // 初始化传入组件的属性
 export function initProps(
   instance: ComponentInternalInstance,
-  rawProps: Data | null, //组件上传入的props
+  rawProps: Data | null, //render函数中传入的props
   isStateful: number, // result of bitwise flag comparison
   isSSR = false
 ) {
   const props: Data = {}
   const attrs: Data = {}
-  def(attrs, InternalObjectKey, 1) //TODO  __vInternal 的作用
+  def(attrs, InternalObjectKey, 1) //__vInternal用于标识一个对象是否为Vue.js内部实现的对象。它通常用于开发和调试工具，不应该被应用程序开发者使用或更改。
 
   instance.propsDefaults = Object.create(null)
 
   setFullProps(instance, rawProps, props, attrs)
 
-  // ensure all declared prop keys are present
+  // ensure all declared prop keys are present 检查所有传递给组件的属性,不在声明的props中是会赋值为undefined
   for (const key in instance.propsOptions[0]) {
     if (!(key in props)) {
       props[key] = undefined
@@ -178,7 +178,7 @@ export function initProps(
     validateProps(rawProps || {}, props, instance)
   }
 
-  // TODO 传递给子组件的props 采用的是shallowReactive方法
+  //传递给子组件的props 采用的是shallowReactive方法
   if (isStateful) {
     // stateful
     instance.props = isSSR ? props : shallowReactive(props)
@@ -332,12 +332,12 @@ export function updateProps(
     validateProps(rawProps || {}, props, instance)
   }
 }
-
+//父组件传递给子组件的props属性设置为完整的响应式属性。这样，当父组件的props属性发生变化时，子组件会自动更新。
 function setFullProps(
   instance: ComponentInternalInstance,
-  rawProps: Data | null, //组件上所有属性
-  props: Data,//组件上新的props
-  attrs: Data //
+  rawProps: Data | null, //render函数传入的props值
+  props: Data,//提取之后的props,props必须在组件中声明,否则会被当做attrs处理
+  attrs: Data //提取的attr实现
 ) {
   const [options, needCastKeys] = instance.propsOptions //组件定义的属性
   let hasAttrsChanged = false
@@ -366,13 +366,13 @@ function setFullProps(
       // prop option names are camelized during normalization, so to support
       // kebab -> camel conversion here we need to camelize the key.
       let camelKey
-      if (options && hasOwn(options, (camelKey = camelize(key)))) { //组件声明的传入属性
+      if (options && hasOwn(options, (camelKey = camelize(key)))) { //foo-bar -> fooBar的形式进行处理
         if (!needCastKeys || !needCastKeys.includes(camelKey)) {
           props[camelKey] = value
         } else {
           ;(rawCastValues || (rawCastValues = {}))[camelKey] = value
         }
-      } else if (!isEmitListener(instance.emitsOptions, key)) { //非事件属性的处理 即普通attr属性
+      } else if (!isEmitListener(instance.emitsOptions, key)) { //非事件属性的处理 且没有在props中声明的即为attr属性
         // Any non-declared (either as a prop or an emitted event) props are put
         // into a separate `attrs` object for spreading. Make sure to preserve
         // original key casing
@@ -412,7 +412,6 @@ function setFullProps(
 
 
 // 根据props options 处理props的默认值
-// TODO propsDefaults的作用
 function resolvePropValue(
   options: NormalizedProps,
   props: Data,
