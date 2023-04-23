@@ -1324,7 +1324,7 @@ function baseCreateRenderer(
         instance.update()
       }
     } else {
-      // no update needed. just copy over properties 不做更新知识替换对应的vnode
+      // no update needed. just copy over properties 不做更新只是替换对应的vnode
       n2.el = n1.el
       instance.vnode = n2
     }
@@ -1622,7 +1622,7 @@ function baseCreateRenderer(
     update() // effect函数 完成 effect 与 data dep的互相订阅,依赖收集
   }
 
-  // 组件预渲染,内部调用函数
+  // 组件更新时,需要先更新组件vnode上的props和slots,这两个内容是在父级组件render时候产生,子组件更新需要将这两个内容传递至子组件中使用
   const updateComponentPreRender = (
     instance: ComponentInternalInstance,
     nextVNode: VNode,
@@ -1992,7 +1992,7 @@ function baseCreateRenderer(
           // key-less node, try to locate a key-less node of the same type
           for (j = s2; j <= e2; j++) {
             if (
-              newIndexToOldIndexMap[j - s2] === 0 && //newIndexToOldIndexMap[j - s2] === 0 表示该新的节点已经找匹配到了一个旧的节点,值为对应旧节点的下标
+              newIndexToOldIndexMap[j - s2] === 0 && //newIndexToOldIndexMap[j - s2] === 0 表示该新的节点还未匹配到对应的旧节点
               isSameVNodeType(prevChild, c2[j] as VNode)
             ) {
               newIndex = j

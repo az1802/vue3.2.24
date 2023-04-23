@@ -319,7 +319,7 @@ export function trigger(
           if (isMap(target)) {
             deps.push(depsMap.get(MAP_KEY_ITERATE_KEY))
           }
-        } else if (isIntegerKey(key)) {//数组push,unshift会引起length的变化触发trigger
+        } else if (isIntegerKey(key)) {//数组push,pop,unshift,shift,splice会引起length的变化触发trigger
           // new index added to array -> length changes
           deps.push(depsMap.get('length'))
         }

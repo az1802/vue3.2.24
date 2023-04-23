@@ -746,7 +746,7 @@ export function handleSetupResult(
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
       instance.devtoolsRawSetupState = setupResult
     }
-    instance.setupState = proxyRefs(setupResult) //返回对象加一层代理用于处理ref的访问,在render函数中访问时不用写.value
+    instance.setupState = proxyRefs(setupResult) //返回对象加一层代理用于处理ref的访问,在render函数中访问时不用写.value,这里只处理根级别的ref,嵌套的不做处理
     if (__DEV__) {
       exposeSetupStateOnRenderContext(instance)
     }
