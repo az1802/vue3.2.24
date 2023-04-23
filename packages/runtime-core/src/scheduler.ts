@@ -34,7 +34,7 @@ export interface SchedulerJob extends Function {
 export type SchedulerJobs = SchedulerJob | SchedulerJob[]
 
 let isFlushing = false //正在执行job
-let isFlushPending = false
+let isFlushPending = false //任务放入微任务中,正在等待被执行
 
 const queue: SchedulerJob[] = [] //调度任务列表
 let flushIndex = 0
@@ -55,7 +55,7 @@ let currentPreFlushParentJob: SchedulerJob | null = null
 const RECURSION_LIMIT = 100
 type CountMap = Map<SchedulerJob, number>
 
-// currentFlushPromise 存在的时候 会将任务当前处理队列的最后 这样会在组件更新任务完全执行完成了 处理新的任务
+// currentFlushPromise表示处理当前任务队列的promise对象,存在的时候,会将任务放到当前currentFlushPromise后处理,这样会在组件更新任务完全执行完成了 处理新的任务
 export function nextTick<T = void>(
   this: T,
   fn?: (this: T) => void
@@ -83,6 +83,7 @@ function findInsertionIndex(id: number) {
   return start
 }
 
+// 添加调度任务到队列中
 export function queueJob(job: SchedulerJob) {
   // the dedupe search uses the startIndex argument of Array.includes()
   // by default the search index includes the current job that is being run
@@ -194,6 +195,7 @@ export function flushPreFlushCbs(
 // 清除类型为post的回调任务(一些需要渲染完成后再执行的钩子函数都会在这个阶段执行，比如 mounted hook 等等。)
 export function flushPostFlushCbs(seen?: CountMap) {
   // flush any pre cbs queued during the flush (e.g. pre watchers)
+  // 优先处理任务pre级别的任务
   flushPreFlushCbs()
   if (pendingPostFlushCbs.length) {
     const deduped = [...new Set(pendingPostFlushCbs)]
@@ -243,7 +245,7 @@ function flushJobs(seen?: CountMap) {
     seen = seen || new Map()
   }
 
-  flushPreFlushCbs(seen) //清空pre队列
+  flushPreFlushCbs(seen) //清空pre队列,即运行组件更新前的任务
 
   // Sort queue before flush.
   // This ensures that:
@@ -284,7 +286,7 @@ function flushJobs(seen?: CountMap) {
     flushIndex = 0
     queue.length = 0
 
-    flushPostFlushCbs(seen)  // 执行后置队列任务
+    flushPostFlushCbs(seen)  // 执行后置队列任务,即组件更新后的任务
 
     isFlushing = false
     currentFlushPromise = null //充值当前微任务为null

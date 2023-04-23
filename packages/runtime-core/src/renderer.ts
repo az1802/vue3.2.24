@@ -1594,7 +1594,8 @@ function baseCreateRenderer(
       }
     }
 
-    // create reactive effect,当数据发生变化,产生更新时,重新运行effect函数
+    // create reactive effect
+    //当数据发生变化,会将update函数放入scheduler队列中,当传入的函数相同时会进行去重的处理
     const effect = (instance.effect = new ReactiveEffect(
       componentUpdateFn,
       () => queueJob(update), //自定义 update函数的调度,依赖数据发生变化时完成调度更新,queueJob采用异步处理任务
@@ -1602,7 +1603,7 @@ function baseCreateRenderer(
     ))
 
     const update: SchedulerJob = (instance.update = () => effect.run());
-    update.id = instance.uid
+    update.id = instance.uid //更新任务的job id插入job时会根据id进行排序,此处使用uid可以保证父组件永远在子组件的前面进行处理
     // allowRecurse
     // #1801, #2043 component render effects should allow recursive updates
     //TODO 组件允许递归更新
