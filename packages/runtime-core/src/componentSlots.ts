@@ -130,17 +130,23 @@ const normalizeVNodeSlots = (
   instance.slots.default = () => normalized
 }
 
+// 初始化插槽
 export const initSlots = (
   instance: ComponentInternalInstance,
   children: VNodeNormalizedChildren
 ) => {
+  // shapeFlag 有 SLOTS_CHILDREN 类型
   if (instance.vnode.shapeFlag & ShapeFlags.SLOTS_CHILDREN) {
+     // 对于我们的示例中，slotFlag 类型是 STABLE
     const type = (children as RawSlots)._
     if (type) {
       // users can get the shallow readonly version of the slots object through `this.$slots`,
       // we should avoid the proxy object polluting the slots of the internal instance
+      // 用户可以使用 this.$slots 来获取 slots 对象的浅拷贝内部实例上的 slots
+      // 所以这里应该避免 proxy 对象污染
+      // 为 instance slots 属性赋值 children
       instance.slots = toRaw(children as InternalSlots)
-      // make compiler marker non-enumerable
+      // make compiler marker non-enumerable 标记不可枚举
       def(children as InternalSlots, '_', type)
     } else {
       normalizeObjectSlots(
@@ -158,6 +164,7 @@ export const initSlots = (
   def(instance.slots, InternalObjectKey, 1)
 }
 
+// 更新插槽
 export const updateSlots = (
   instance: ComponentInternalInstance,
   children: VNodeNormalizedChildren,

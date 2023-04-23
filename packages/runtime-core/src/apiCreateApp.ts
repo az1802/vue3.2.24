@@ -145,7 +145,7 @@ export type Plugin =
       install: PluginInstallFunction
     }
 
-// TODO 创建app执行上下文, optionsCache propsCache emitsCache的作用
+//创建app执行上下文
 export function createAppContext(): AppContext {
   return {
     app: null as any,
@@ -306,7 +306,7 @@ export function createAppAPI<HostElement>(
           vnode.appContext = context
 
           // HMR root reload
-          if (__DEV__) { //热更新 整个应用的重新加载,cloneVnode会复制vnode数据所以内部状态不会丢失
+          if (__DEV__) { //用于热更新 整个应用的重新加载,cloneVnode会复制vnode数据所以内部状态不会丢失
             context.reload = () => {
               render(cloneVNode(vnode), rootContainer, isSVG)
             }
