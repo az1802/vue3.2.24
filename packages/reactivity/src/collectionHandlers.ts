@@ -45,6 +45,7 @@ function get(
   }
 }
 
+// 当key值是响应式数据时,会对其值和响应式数据都进行track
 function has(this: CollectionTypes, key: unknown, isReadonly = false): boolean {
   const target = (this as any)[ReactiveFlags.RAW]
   const rawTarget = toRaw(target)
@@ -60,12 +61,14 @@ function has(this: CollectionTypes, key: unknown, isReadonly = false): boolean {
     : target.has(key) || target.has(rawKey)
 }
 
+// 获取原始size值,同时将ITERATE_KEY进行track
 function size(target: IterableCollections, isReadonly = false) {
   target = (target as any)[ReactiveFlags.RAW]
   !isReadonly && track(toRaw(target), TrackOpTypes.ITERATE, ITERATE_KEY)
   return Reflect.get(target, 'size', target)
 }
 
+// 增加不存在新值,进行trigger更新
 function add(this: SetTypes, value: unknown) {
   value = toRaw(value)
   const target = toRaw(this)
@@ -137,6 +140,7 @@ function clear(this: IterableCollections) {
   return result
 }
 
+// 创建forEach的代理函数,对值会根据shallow readonly进行响应式处理
 function createForEach(isReadonly: boolean, isShallow: boolean) {
   return function forEach(
     this: IterableCollections,
@@ -170,6 +174,7 @@ interface IterationResult {
   done: boolean
 }
 
+// 针对'keys', 'values', 'entries'创建迭代方法,当数据发生变化时,三个迭代操作相关的effect也会被track收集
 function createIterableMethod(
   method: string | symbol,
   isReadonly: boolean,

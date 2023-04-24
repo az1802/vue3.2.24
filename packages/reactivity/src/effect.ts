@@ -129,7 +129,7 @@ export class ReactiveEffect<T = any> {
       shouldTrack = lastShouldTrack
       this.parent = undefined
 
-      if (this.deferStop) { //延迟处理dep 与 effect之间的依赖关系
+      if (this.deferStop) { //延迟处理effect.stop
         this.stop()
       }
     }
@@ -137,8 +137,8 @@ export class ReactiveEffect<T = any> {
 
   stop() {
     // stopped while running itself - defer the cleanup
-    if (activeEffect === this) { //运行effect函数之后运行stop函数
-      this.deferStop = true //TODO
+    if (activeEffect === this) { //当前正在运行的effect需要stop会先更改deferStop标志,当run函数运行到末尾时,再进行stop
+      this.deferStop = true
     } else if (this.active) {
       cleanupEffect(this)
       if (this.onStop) {
@@ -311,6 +311,7 @@ export function trigger(
     }
 
     // also run for iteration key on ADD | DELETE | Map.SET
+    //  ITERATE_KEY MAP_KEY_ITERATE_KEY是对对象进行了迭代操作这里也需要进行dep的处理
     switch (type) {
       //ADD DELETE
       case TriggerOpTypes.ADD:

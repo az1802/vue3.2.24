@@ -137,7 +137,7 @@ export function unref<T>(ref: T | Ref<T>): T {
 
 const shallowUnwrapHandlers: ProxyHandler<any> = {
   get: (target, key, receiver) => unref(Reflect.get(target, key, receiver)),
-  set: (target, key, value, receiver) => {
+  set: (target, key, value, receiver) => {//旧值是ref新值不是ref时会对旧值的ref.value进行赋值
     const oldValue = target[key]
     if (isRef(oldValue) && !isRef(value)) {
       oldValue.value = value
